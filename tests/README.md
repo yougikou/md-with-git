@@ -41,6 +41,7 @@ Bitbucket Cloud 的文档空间使用 `source=bitbucket`，其中 `<owner>` 对�
 - [ ] 首页或文档页顶栏的本地文件夹入口能读取选中的 fixtures，而不是访问服务器。
 - [ ] Bitbucket URL 使用 `source=bitbucket` 后能读取公开仓库文档空间。
 - [ ] VERSION 选择器能切换 GitHub/Bitbucket 的 branch 或 tag。
+- [ ] 本地文档空间不显示 Git VERSION 选择器或版本徽标。
 
 Phase 2 的代码级验证已通过：`tsc -b` 与 `vite build`。上面的 Provider 访问项需要在浏览器中
 使用公开仓库或本地文件夹完成验收后再勾选。

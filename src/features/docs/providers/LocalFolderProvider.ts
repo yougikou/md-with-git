@@ -40,7 +40,7 @@ export class LocalFolderProvider implements RepositoryProvider {
   }
 
   async getRefs(_input: TreeQuery): Promise<RepositoryRef[]> {
-    return [{ name: 'local', type: 'branch', isDefault: true }];
+    return [];
   }
 
   async getFile(input: FileQuery): Promise<string> {

@@ -333,6 +333,8 @@ LocalFolderProvider
   优先使用 File System Access API，不支持时回退到 `webkitdirectory`，拖拽入口留作增强。
 - 本地模式只保存用户授权目录中的文件句柄，按需读取当前 Markdown 或资源文件；本地来源不写入
   IndexedDB Markdown 缓存。
+- 本地文件夹模式不显示 Git VERSION；若未来要读取本地工作树的 `.git` 历史，需要桌面端或
+  localhost 辅助服务，不能从浏览器文件句柄中直接推断。
 - `scope` 仍然是文档空间根目录，Provider 的文件树和渲染路由不会越过该边界。
 
 进入条件：Phase 1 的 GitHub 公共仓库手动验收通过，并完成 `tests/` 中的测试夹具检查。

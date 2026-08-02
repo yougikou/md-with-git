@@ -89,7 +89,7 @@ export default function DocsPage() {
     return sourceKind === 'bitbucket' ? bitbucketProvider : githubProvider;
   }, [localId, sourceKind]);
   const documentPath = scope && requestedPath === scope ? '' : requestedPath;
-  const activeRef = ref || defaultRef;
+  const activeRef = sourceKind === 'local' ? undefined : ref || defaultRef;
   const activePath = source?.path || documentPath;
 
   useEffect(() => {
@@ -98,7 +98,7 @@ export default function DocsPage() {
     if (sourceKind !== 'local' && !scope) { setLoading(false); setError('请指定要渲染的文档目录，例如 ?scope=docs 或 ?scope=docs/guide。'); return; }
     let cancelled = false;
     setLoading(true); setError(null); setSource(null);
-    provider.getRefs({ owner, repository, ref, rootPath: scope }).then(async (nextRefs) => {
+    (sourceKind === 'local' ? Promise.resolve([] as RepositoryRef[]) : provider.getRefs({ owner, repository, ref, rootPath: scope })).then(async (nextRefs) => {
       const nextDefault = nextRefs.find((item) => item.isDefault)?.name || nextRefs[0]?.name;
       const nextRef = ref || nextDefault;
       const nextEntries = await provider.getTree({ owner, repository, ref: nextRef, rootPath: scope });
@@ -153,5 +153,5 @@ export default function DocsPage() {
 
 function Topbar({ owner, repository, ref, defaultRef, scope, source, refs, onRefChange, onOpenLocal, onMenu }: { owner: string; repository: string; ref?: string; defaultRef?: string; scope?: string; source: SourceKind; refs: RepositoryRef[]; onRefChange: (value: string) => void; onOpenLocal: (files: LocalFolderSelection[]) => void; onMenu: () => void }) {
   const sourceLabel = source === 'bitbucket' ? 'Bitbucket' : source === 'local' ? 'Local' : 'GitHub';
-  return <header className="docs-topbar"><button className="mobile-menu" onClick={onMenu} aria-label="打开目录">☰</button><Link to="/" className="topbar-brand"><span className="brand-mark">MD</span><span>Git MD Viewer</span></Link><span className="topbar-divider">/</span><span className="source-badge">{sourceLabel}</span><span className="repo-name">{owner && repository ? `${owner}/${repository}` : 'Local folder'}</span><span className="topbar-spacer" /><RefPicker refs={refs} value={ref} defaultRef={defaultRef} onChange={onRefChange} />{scope && <span className="topbar-scope">scope: {scope}</span>}<LocalFolderPicker onSelect={onOpenLocal} compact /><a className="github-link" href={source === 'github' && owner && repository ? `https://github.com/${owner}/${repository}` : source === 'bitbucket' && owner && repository ? `https://bitbucket.org/${owner}/${repository}` : '#'} target={source === 'local' ? undefined : '_blank'} rel={source === 'local' ? undefined : 'noreferrer'}>View source ↗</a></header>;
+  return <header className="docs-topbar"><button className="mobile-menu" onClick={onMenu} aria-label="打开目录">☰</button><Link to="/" className="topbar-brand"><span className="brand-mark">MD</span><span>Git MD Viewer</span></Link><span className="topbar-divider">/</span><span className="source-badge">{sourceLabel}</span><span className="repo-name">{owner && repository ? `${owner}/${repository}` : 'Local folder'}</span><span className="topbar-spacer" />{source !== 'local' && <RefPicker refs={refs} value={ref} defaultRef={defaultRef} onChange={onRefChange} />}{scope && <span className="topbar-scope">scope: {scope}</span>}<LocalFolderPicker onSelect={onOpenLocal} compact /><a className="github-link" href={source === 'github' && owner && repository ? `https://github.com/${owner}/${repository}` : source === 'bitbucket' && owner && repository ? `https://bitbucket.org/${owner}/${repository}` : '#'} target={source === 'local' ? undefined : '_blank'} rel={source === 'local' ? undefined : 'noreferrer'}>View source ↗</a></header>;
 }
