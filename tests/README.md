@@ -87,3 +87,18 @@ Phase 3 第一批的代码级验证已通过：`tsc -b` 与 `vite build`。YAML 
 当前 Phase 1 的 Sidebar 标题按路径生成；文档正文标题会按
 `frontmatter.title` → 第一个 H1 → 文件名解析。frontmatter 的 `order` 字段暂时只用于
 确认数据可被读取，排序能力留到后续实现。
+## 本地 Git 浏览器端回归
+
+该工具只读指定仓库的 `.git` 和文档目录；不会复制、写入或缓存目标仓库的文件。它用于在真实浏览器中验证本地 Git Provider。
+
+```powershell
+node tests/local-git-browser-server.mjs E:\develop\code-prism docs
+```
+
+随后访问 `http://localhost:4173/local-git-browser-harness.html`。页面输出 `"ok": true` 表示浏览器端可读取 Git refs、HEAD 文档树与 scope 内的 Markdown 文件。
+
+在无界面 Chromium 中执行同一测试：
+
+```powershell
+node tests/run-local-git-browser-harness.mjs
+```

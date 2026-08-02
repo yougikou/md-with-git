@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Local Git browser harness</title>
+  </head>
+  <body>
+    <pre id="result">正在运行…</pre>
+    <script type="module">
+      import { LocalGitRepository } from '/src/features/docs/providers/LocalGitRepository.ts';
+
+      const output = document.querySelector('#result');
+      const service = new URLSearchParams(location.search).get('service') || 'http://127.0.0.1:4180';
+      let stage = '准备文件索引';
+
+      try {
+        stage = '读取文件索引';
+        const paths = await fetch(`${service}/index`).then(async (response) => {
+          if (!response.ok) throw new Error(await response.text());
+          return response.json();
+        });
+        const repository = new LocalGitRepository(async (path) => {
+          const response = await fetch(`${service}/file?path=${encodeURIComponent(path)}`);
+          return response.ok ? new Uint8Array(await response.arrayBuffer()) : null;
+        }, () => paths);
+        stage = '读取版本引用';
+        const refs = await repository.getRefs();
+        stage = '遍历文档树';
+        const files = await repository.listFiles();
+        const document = files.find((path) => path.startsWith('docs/') && path.endsWith('.md'));
+        if (!document) throw new Error('HEAD 中没有 Markdown 文档。');
+        stage = '读取 Markdown 文档';
+        const contents = await repository.readFile(document);
+        output.textContent = JSON.stringify({ ok: true, refs: refs.length, files: files.length, document, bytes: contents.byteLength }, null, 2);
+      } catch (error) {
+        output.textContent = JSON.stringify({ ok: false, stage, message: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined }, null, 2);
+      }
+    </script>
+  </body>
+</html>

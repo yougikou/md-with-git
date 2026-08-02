@@ -533,6 +533,7 @@ Phase 1 核心 Viewer       已实现
 自动化类型检查             已通过：tsc -b
 生产构建                   已通过：vite build
 GitHub 真实仓库验收        待使用公开仓库路径手动确认
+本地 Git 浏览器端回归      已通过：真实含 pack 对象的仓库，refs、文档树与 scope 内 Markdown 均可读取
 Phase 2 多数据源           已实现，待 Bitbucket/本地公开手动验收
 Phase 3 YAML 渲染器第一批   已实现，待使用 fixtures 浏览器手动验收
 ```
@@ -567,6 +568,9 @@ GitHub/Bitbucket 原生网站；“与当前版本比较”以当前查看版本
 `LocalFolderProvider` 在本地 Git 专用配置完成后检测 `.git/HEAD` 并启用。它支持只读 refs、版本文件读取、文件历史和
 基础 unified diff；普通文件夹仍保持无版本历史的行为。首页的本地 Git 设置表单位于 `src/main.tsx`，通过
 `localMode=git` 和 `scope` 明确区分本地 Git 文档空间与普通本地文档空间。
+浏览器运行时会在加载 Git 解析器前显式提供 `Buffer` 兼容层，避免 Vite 环境将已存在的 loose/pack 对象误判为缺失。
+`tests/local-git-browser-server.mjs` 与 `tests/run-local-git-browser-harness.mjs` 提供只读的 Chromium 回归流程；
+它会验证 refs、HEAD 文档树和 scope 内 Markdown，不复制、不上传或缓存目标仓库内容。
 
 测试清单与预期结果见 `tests/README.md`。每完成一部分功能，应先更新本节状态与测试结果，
 再继续下一个 Phase。

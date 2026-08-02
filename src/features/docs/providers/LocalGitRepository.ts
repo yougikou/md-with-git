@@ -1,4 +1,4 @@
-import git from 'isomorphic-git';
+import { getBrowserGit } from './isomorphicGitBrowser';
 import type { RepositoryRef } from '../types';
 
 type ReadLocalFile = (path: string) => Promise<Uint8Array | null>;
@@ -15,6 +15,12 @@ function normalize(path: string | null | undefined): string {
 
 function decode(bytes: Uint8Array): string {
   return new TextDecoder().decode(bytes);
+}
+
+function missingPath(path: string): Error & { code: 'ENOENT' } {
+  const error = new Error(`本地 Git 路径不存在：${path}`) as Error & { code: 'ENOENT' };
+  error.code = 'ENOENT';
+  return error;
 }
 
 function oidFromBytes(bytes: Uint8Array): string {
@@ -58,9 +64,7 @@ export class LocalGitRepository {
       }
       if (!bytes) {
         this.lastReadFailure = relativePath;
-        const error = new Error(`本地 Git 文件不存在：${relativePath}`) as Error & { code?: string };
-        error.code = 'ENOENT';
-        throw error;
+        throw missingPath(relativePath);
       }
       if (typeof options === 'string' || options?.encoding) return decode(bytes);
       return bytes;
@@ -71,7 +75,7 @@ export class LocalGitRepository {
       const files = [...this.listLocalFiles()].map(normalize);
       if (files.includes(relative)) return { isFile: () => true, isDirectory: () => false };
       if (files.some((file) => file.startsWith(`${relative}/`))) return { isFile: () => false, isDirectory: () => true };
-      throw new Error(`本地 Git 路径不存在：${relative}`);
+      throw missingPath(relative);
     };
     const readdir = async (path: string): Promise<string[]> => {
       const relative = this.relativePath(path);
@@ -106,12 +110,14 @@ export class LocalGitRepository {
   }
 
   private async resolve(ref = 'HEAD'): Promise<string> {
+    const git = await getBrowserGit();
     const oid = await git.resolveRef({ ...this.options(), ref });
     if (typeof oid !== 'string' || !oid) throw new Error(`无法解析本地 Git 引用：${ref}`);
     return oid;
   }
 
   private async readObject(oid: string): Promise<{ type: string; object: Uint8Array }> {
+    const git = await getBrowserGit();
     const result = await git.readObject({ ...this.options(), oid, format: 'content' });
     return { type: result.type, object: new Uint8Array(result.object as Uint8Array) };
   }
@@ -156,6 +162,7 @@ export class LocalGitRepository {
   }
 
   async getRefs(): Promise<RepositoryRef[]> {
+    const git = await getBrowserGit();
     const options = this.options();
     const branchNames = await git.listBranches(options);
     const tagNames = await git.listTags(options);
@@ -208,6 +215,7 @@ export class LocalGitRepository {
   }
 
   async log(path: string, ref?: string, limit = 20) {
+    const git = await getBrowserGit();
     return git.log({ ...this.options(), ref: ref || 'HEAD', filepath: normalize(path), depth: limit });
   }
 
