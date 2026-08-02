@@ -44,11 +44,24 @@ export class LocalGitRepository {
   private readonly dir = '/local-repository';
   private readonly gitdir = '/local-repository/.git';
   private readonly fs;
+  private lastReadFailure?: string;
 
   constructor(private readonly readLocalFile: ReadLocalFile, private readonly listLocalFiles: ListLocalFiles) {
     const readFile = async (path: string, options?: { encoding?: string } | string) => {
-      const bytes = await this.readLocalFile(this.relativePath(path));
-      if (!bytes) throw new Error(`本地 Git 文件不存在：${this.relativePath(path)}`);
+      const relativePath = this.relativePath(path);
+      let bytes: Uint8Array | null;
+      try {
+        bytes = await this.readLocalFile(relativePath);
+      } catch (reason) {
+        this.lastReadFailure = `${relativePath}（${reason instanceof Error ? reason.message : String(reason)}）`;
+        throw reason;
+      }
+      if (!bytes) {
+        this.lastReadFailure = relativePath;
+        const error = new Error(`本地 Git 文件不存在：${relativePath}`) as Error & { code?: string };
+        error.code = 'ENOENT';
+        throw error;
+      }
       if (typeof options === 'string' || options?.encoding) return decode(bytes);
       return bytes;
     };
@@ -157,6 +170,7 @@ export class LocalGitRepository {
   }
 
   async listFiles(ref?: string): Promise<string[]> {
+    this.lastReadFailure = undefined;
     const files: string[] = [];
     const visit = async (treeOid: string, prefix = ''): Promise<void> => {
       const entries = await this.readTreeEntries(treeOid);
@@ -166,11 +180,17 @@ export class LocalGitRepository {
         else files.push(path);
       }
     };
-    await visit(await this.treeOidForRef(ref || 'HEAD'));
+    try {
+      await visit(await this.treeOidForRef(ref || 'HEAD'));
+    } catch (reason) {
+      const detail = this.lastReadFailure ? `；无法读取 ${this.lastReadFailure}` : '';
+      throw new Error(`${reason instanceof Error ? reason.message : String(reason)}${detail}`);
+    }
     return files;
   }
 
   async readFile(path: string, ref?: string): Promise<Uint8Array> {
+    this.lastReadFailure = undefined;
     const parts = normalize(path).split('/').filter(Boolean);
     let treeOid = await this.treeOidForRef(ref || 'HEAD');
     for (let index = 0; index < parts.length; index += 1) {
