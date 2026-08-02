@@ -35,6 +35,7 @@ button { font: inherit; }
 .repo-name { color: #697485; font: 400 12px 'DM Mono', monospace; }
 .topbar-spacer { flex: 1; }
 .topbar-ref { padding: 6px 9px; border-radius: 5px; color: #d85638; background: #fff0ea; font: 11px 'DM Mono', monospace; }
+.topbar-scope { max-width: 260px; overflow: hidden; padding: 6px 9px; border-radius: 5px; color: #657183; background: #f1f3f6; font: 11px 'DM Mono', monospace; text-overflow: ellipsis; white-space: nowrap; }
 .github-link { color: #697485; font-size: 12px; }
 .github-link:hover { color: #ee5b39; }
 .mobile-menu { display: none; border: 0; background: transparent; cursor: pointer; }
@@ -99,7 +100,7 @@ button { font: inherit; }
   .feature-strip div { gap: 6px; flex-direction: column; align-items: flex-start; }
   .docs-topbar { height: 58px; padding: 0 16px; gap: 10px; }
   .mobile-menu { display: block; color: #697485; font-size: 20px; }
-  .topbar-divider, .github-link, .topbar-ref { display: none; }
+  .topbar-divider, .github-link, .topbar-ref, .topbar-scope { display: none; }
   .repo-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .docs-layout { position: relative; min-height: calc(100vh - 58px); }
   .docs-sidebar { position: fixed; z-index: 20; top: 58px; bottom: 0; left: 0; width: 285px; padding: 30px 20px; background: #fff; box-shadow: 8px 0 24px #18202b1c; transform: translateX(-105%); transition: transform .25s; }

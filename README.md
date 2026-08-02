@@ -34,7 +34,7 @@ pnpm dev
 推送仓库后，可以用下面的路径验证测试内容：
 
 ```text
-/docs/<GitHub 用户名>/<仓库名>/tests/fixtures/docs/README.md
+/docs/<GitHub 用户名>/<仓库名>/tests/fixtures/docs/README.md?scope=tests%2Ffixtures%2Fdocs
 ```
 
 检查项见 [tests/README.md](./tests/README.md)。

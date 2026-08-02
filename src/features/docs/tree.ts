@@ -8,14 +8,17 @@ function sortNodes(nodes: TreeNode[]): TreeNode[] {
   });
 }
 
-export function buildDocumentTree(entries: RepositoryEntry[]): TreeNode[] {
+export function buildDocumentTree(entries: RepositoryEntry[], rootPath = ''): TreeNode[] {
+  const normalizedRoot = rootPath.replace(/^\/+|\/+$/g, '');
   const paths = entries
     .filter((entry) => entry.type === 'file' && isMarkdown(entry.path) && !entry.path.split('/').some((part) => part.startsWith('_')))
-    .map((entry) => entry.path);
+    .map((entry) => entry.path)
+    .filter((path) => !normalizedRoot || path.startsWith(`${normalizedRoot}/`));
   const root: SectionNode = { kind: 'section', path: '', title: '', children: [] };
 
-  for (const path of paths) {
-    const parts = path.split('/');
+  for (const fullPath of paths) {
+    const relativePath = normalizedRoot ? fullPath.slice(normalizedRoot.length + 1) : fullPath;
+    const parts = relativePath.split('/');
     const file = parts.pop()!;
     let current = root;
     parts.forEach((part, index) => {
@@ -27,7 +30,7 @@ export function buildDocumentTree(entries: RepositoryEntry[]): TreeNode[] {
       }
       current = section;
     });
-    const document: DocumentNode = { kind: 'document', path, title: titleFromPath(file), isIndex: isIndexFile(path) };
+    const document: DocumentNode = { kind: 'document', path: fullPath, title: titleFromPath(file), isIndex: isIndexFile(fullPath) };
     current.children.push(document);
   }
 

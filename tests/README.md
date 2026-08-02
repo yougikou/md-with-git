@@ -8,20 +8,20 @@
 将仓库推送到 GitHub 后，把 `<owner>` 和 `<repository>` 替换为实际值：
 
 ```text
-/docs/<owner>/<repository>/tests/fixtures/docs/README.md
+/docs/<owner>/<repository>/tests/fixtures/docs/README.md?scope=tests%2Ffixtures%2Fdocs
 ```
 
 也可以直接打开其他夹具：
 
 ```text
-/docs/<owner>/<repository>/tests/fixtures/docs/guide/install.md
-/docs/<owner>/<repository>/tests/fixtures/docs/guide/advanced/plugins.md
-/docs/<owner>/<repository>/tests/fixtures/docs/api/button.md
+/docs/<owner>/<repository>/tests/fixtures/docs/guide/install.md?scope=tests%2Ffixtures%2Fdocs
+/docs/<owner>/<repository>/tests/fixtures/docs/guide/advanced/plugins.md?scope=tests%2Ffixtures%2Fdocs
+/docs/<owner>/<repository>/tests/fixtures/docs/api/button.md?scope=tests%2Ffixtures%2Fdocs
 ```
 
 ## 验收清单
 
-- [ ] 进入测试首页后，左侧 Sidebar 能发现 `guide`、`api` 和 `examples` 分区。
+- [ ] 进入测试首页后，左侧 Sidebar 只显示 `tests/fixtures/docs` 下的 `guide`、`api` 和 `examples` 分区，不显示仓库其它目录。
 - [ ] `README.md` 能作为测试目录首页读取，并显示 frontmatter 标题。
 - [ ] `guide/install.md` 能通过深层路径打开，URL 中的斜杠不会丢失。
 - [ ] `guide/advanced/plugins.md` 能显示多级展开树。

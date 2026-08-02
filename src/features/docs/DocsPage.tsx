@@ -50,6 +50,7 @@ export default function DocsPage() {
   const repository = segments[1] || '';
   const requestedPath = segments.slice(2).join('/');
   const ref = searchParams.get('ref') || undefined;
+  const scope = searchParams.get('scope')?.replace(/^\/+|\/+$/g, '') || undefined;
   const activePath = source?.path || requestedPath;
 
   useEffect(() => {
@@ -58,17 +59,21 @@ export default function DocsPage() {
     setLoading(true); setError(null);
     provider.getTree({ owner, repository, ref }).then((nextEntries) => {
       if (cancelled) return;
-      setEntries(nextEntries); setTree(buildDocumentTree(nextEntries));
+      setEntries(nextEntries); setTree(buildDocumentTree(nextEntries, scope));
     }).catch((reason: unknown) => { if (!cancelled) setError(reason instanceof Error ? reason.message : '无法读取仓库文件树。'); }).finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [owner, repository, ref]);
+  }, [owner, repository, ref, scope]);
 
   const selectedDocument = useMemo(() => requestedPath ? findDocument(tree, requestedPath) : findFirstDocument(tree), [requestedPath, tree]);
 
   const openDocument = useCallback((path: string) => {
-    navigate(`/docs/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}/${path.split('/').map(encodeURIComponent).join('/')}${ref ? `?ref=${encodeURIComponent(ref)}` : ''}`);
+    const query = new URLSearchParams();
+    if (ref) query.set('ref', ref);
+    if (scope) query.set('scope', scope);
+    const queryString = query.toString();
+    navigate(`/docs/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}/${path.split('/').map(encodeURIComponent).join('/')}${queryString ? `?${queryString}` : ''}`);
     setSidebarOpen(false);
-  }, [navigate, owner, repository, ref]);
+  }, [navigate, owner, repository, ref, scope]);
 
   useEffect(() => {
     if (!selectedDocument) return;
@@ -79,15 +84,15 @@ export default function DocsPage() {
     return () => { cancelled = true; };
   }, [owner, repository, ref, selectedDocument]);
 
-  if (loading) return <div className="docs-shell"><Topbar owner={owner} repository={repository} ref={ref} onMenu={() => setSidebarOpen(true)} /><LoadingState /></div>;
-  if (error && !tree.length) return <div className="docs-shell"><Topbar owner={owner} repository={repository} ref={ref} onMenu={() => setSidebarOpen(true)} /><ErrorState message={error} /></div>;
-  if (!tree.length) return <div className="docs-shell"><Topbar owner={owner} repository={repository} ref={ref} onMenu={() => setSidebarOpen(true)} /><ErrorState message="仓库中没有发现 Markdown 或 MDX 文件。" /></div>;
-  if (!selectedDocument) return <div className="docs-shell"><Topbar owner={owner} repository={repository} ref={ref} onMenu={() => setSidebarOpen(true)} /><ErrorState message="找不到请求的 Markdown 文档，请从左侧目录选择一个页面。" /></div>;
+  if (loading) return <div className="docs-shell"><Topbar owner={owner} repository={repository} ref={ref} scope={scope} onMenu={() => setSidebarOpen(true)} /><LoadingState /></div>;
+  if (error && !tree.length) return <div className="docs-shell"><Topbar owner={owner} repository={repository} ref={ref} scope={scope} onMenu={() => setSidebarOpen(true)} /><ErrorState message={error} /></div>;
+  if (!tree.length) return <div className="docs-shell"><Topbar owner={owner} repository={repository} ref={ref} scope={scope} onMenu={() => setSidebarOpen(true)} /><ErrorState message={scope ? `目录 “${scope}” 中没有发现 Markdown 或 MDX 文件。` : '仓库中没有发现 Markdown 或 MDX 文件。'} /></div>;
+  if (!selectedDocument) return <div className="docs-shell"><Topbar owner={owner} repository={repository} ref={ref} scope={scope} onMenu={() => setSidebarOpen(true)} /><ErrorState message="找不到请求的 Markdown 文档，请从左侧目录选择一个页面。" /></div>;
 
   const parsed = source ? parseFrontmatter(source.content) : null;
-  return <div className="docs-shell"><Topbar owner={owner} repository={repository} ref={ref} onMenu={() => setSidebarOpen(true)} /><div className={`docs-layout ${sidebarOpen ? 'sidebar-visible' : ''}`}><div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} /><Sidebar tree={tree} activePath={activePath} onNavigate={openDocument} /><main className="docs-main"><div className="document-wrap">{contentLoading || !parsed ? <div className="document-skeleton"><div /><div /><div /><div /></div> : <><div className="document-meta"><span>{selectedDocument.path}</span>{ref && <span className="ref-badge">{ref.slice(0, 7)}</span>}</div><article className="markdown-body"><h1>{parsed.title}</h1><ReactMarkdown remarkPlugins={[remarkGfm]} components={{ h1: () => null, a: ({ href, children, ...props }) => <a href={href} {...props} target={href?.startsWith('http') ? '_blank' : undefined} rel={href?.startsWith('http') ? 'noreferrer' : undefined}>{children}</a>, code: ({ className, children, ...props }) => { const language = className?.replace('language-', ''); return <code className={`${className || ''} code-inline`} data-language={language} {...props}>{children}</code>; } }}>{parsed.content}</ReactMarkdown></article><div className="document-footer"><span>Powered by Git MD Viewer</span><span className="footer-note">文件历史即将加入</span></div></>}</div></main></div></div>;
+  return <div className="docs-shell"><Topbar owner={owner} repository={repository} ref={ref} scope={scope} onMenu={() => setSidebarOpen(true)} /><div className={`docs-layout ${sidebarOpen ? 'sidebar-visible' : ''}`}><div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} /><Sidebar tree={tree} activePath={activePath} onNavigate={openDocument} /><main className="docs-main"><div className="document-wrap">{contentLoading || !parsed ? <div className="document-skeleton"><div /><div /><div /><div /></div> : <><div className="document-meta"><span>{selectedDocument.path}</span>{ref && <span className="ref-badge">{ref.slice(0, 7)}</span>}</div><article className="markdown-body"><h1>{parsed.title}</h1><ReactMarkdown remarkPlugins={[remarkGfm]} components={{ h1: () => null, a: ({ href, children, ...props }) => <a href={href} {...props} target={href?.startsWith('http') ? '_blank' : undefined} rel={href?.startsWith('http') ? 'noreferrer' : undefined}>{children}</a>, code: ({ className, children, ...props }) => { const language = className?.replace('language-', ''); return <code className={`${className || ''} code-inline`} data-language={language} {...props}>{children}</code>; } }}>{parsed.content}</ReactMarkdown></article><div className="document-footer"><span>Powered by Git MD Viewer</span><span className="footer-note">文件历史即将加入</span></div></>}</div></main></div></div>;
 }
 
-function Topbar({ owner, repository, ref, onMenu }: { owner: string; repository: string; ref?: string; onMenu: () => void }) {
-  return <header className="docs-topbar"><button className="mobile-menu" onClick={onMenu} aria-label="打开目录">☰</button><Link to="/" className="topbar-brand"><span className="brand-mark">MD</span><span>Git MD Viewer</span></Link><span className="topbar-divider">/</span><span className="repo-name">{owner && repository ? `${owner}/${repository}` : 'Repository'}</span><span className="topbar-spacer" />{ref && <span className="topbar-ref">ref: {ref}</span>}<a className="github-link" href={owner && repository ? `https://github.com/${owner}/${repository}` : 'https://github.com'} target="_blank" rel="noreferrer">View on GitHub ↗</a></header>;
+function Topbar({ owner, repository, ref, scope, onMenu }: { owner: string; repository: string; ref?: string; scope?: string; onMenu: () => void }) {
+  return <header className="docs-topbar"><button className="mobile-menu" onClick={onMenu} aria-label="打开目录">☰</button><Link to="/" className="topbar-brand"><span className="brand-mark">MD</span><span>Git MD Viewer</span></Link><span className="topbar-divider">/</span><span className="repo-name">{owner && repository ? `${owner}/${repository}` : 'Repository'}</span><span className="topbar-spacer" />{scope && <span className="topbar-scope">scope: {scope}</span>}{ref && <span className="topbar-ref">ref: {ref}</span>}<a className="github-link" href={owner && repository ? `https://github.com/${owner}/${repository}` : 'https://github.com'} target="_blank" rel="noreferrer">View on GitHub ↗</a></header>;
 }

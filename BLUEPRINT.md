@@ -391,8 +391,11 @@ Phase 2 多数据源           未开始，等待 Phase 1 验收
 可以通过下面的路径追加验证：
 
 ```text
-/docs/<GitHub 用户名>/<仓库名>/tests/fixtures/docs/README.md
+/docs/<GitHub 用户名>/<仓库名>/tests/fixtures/docs/README.md?scope=tests%2Ffixtures%2Fdocs
 ```
+
+`scope` 用来限制当前文档空间的根目录。普通仓库浏览不带 `scope` 时仍显示全仓库；测试夹具
+带上 `scope=tests%2Ffixtures%2Fdocs` 后，Sidebar、默认首页和后续文档导航都只作用于夹具目录。
 
 测试清单与预期结果见 `tests/README.md`。每完成一部分功能，应先更新本节状态与测试结果，
 再继续下一个 Phase。
