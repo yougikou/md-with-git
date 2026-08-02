@@ -51,10 +51,12 @@ export default function DocsPage() {
   const requestedPath = segments.slice(2).join('/');
   const ref = searchParams.get('ref') || undefined;
   const scope = searchParams.get('scope')?.replace(/^\/+|\/+$/g, '') || undefined;
-  const activePath = source?.path || requestedPath;
+  const documentPath = scope && requestedPath === scope ? '' : requestedPath;
+  const activePath = source?.path || documentPath;
 
   useEffect(() => {
     if (!owner || !repository) { setLoading(false); setError('请使用 /docs/:owner/:repository 打开一个公开 GitHub 仓库。'); return; }
+    if (!scope) { setLoading(false); setError('请指定要渲染的文档目录，例如 ?scope=docs 或 ?scope=docs/guide。'); return; }
     let cancelled = false;
     setLoading(true); setError(null);
     provider.getTree({ owner, repository, ref }).then((nextEntries) => {
@@ -64,7 +66,7 @@ export default function DocsPage() {
     return () => { cancelled = true; };
   }, [owner, repository, ref, scope]);
 
-  const selectedDocument = useMemo(() => requestedPath ? findDocument(tree, requestedPath) : findFirstDocument(tree), [requestedPath, tree]);
+  const selectedDocument = useMemo(() => documentPath ? findDocument(tree, documentPath) : findFirstDocument(tree), [documentPath, tree]);
 
   const openDocument = useCallback((path: string) => {
     const query = new URLSearchParams();

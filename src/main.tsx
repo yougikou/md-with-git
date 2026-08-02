@@ -25,13 +25,13 @@ function HomePage() {
       <section className="hero">
         <p className="eyebrow">DOCUMENTATION, WITH HISTORY</p>
         <h1>把 Git 仓库里的 Markdown，<em>变成可读的文档空间。</em></h1>
-        <p className="hero-copy">自动发现目录、跟随仓库版本，并在一个干净的阅读界面里浏览公开 GitHub 文档。</p>
+        <p className="hero-copy">指定一个 Git 仓库中的文档空间，自动发现目录、跟随仓库版本，并在一个干净的阅读界面里浏览 Markdown。</p>
         <div className="hero-actions">
-          <Link className="button button-primary" to="/docs/facebook/react">打开示例仓库 <span>↗</span></Link>
+          <Link className="button button-primary" to="/docs/vitejs/vite/docs/guide?scope=docs%2Fguide">打开示例文档 <span>↗</span></Link>
           <a className="button button-quiet" href="https://github.com" target="_blank" rel="noreferrer">GitHub <span>↗</span></a>
         </div>
         <div className="feature-strip">
-          <div><strong>01</strong><span>自动目录树</span></div>
+          <div><strong>01</strong><span>文档空间</span></div>
           <div><strong>02</strong><span>GFM Markdown</span></div>
           <div><strong>03</strong><span>Commit 版本</span></div>
         </div>

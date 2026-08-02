@@ -59,6 +59,16 @@ interface DocsRuntime {
 }
 ```
 
+Viewer 的一次打开操作对应一个“文档空间”，即一个 Git 仓库中的文档根目录，而不是整个 Git
+仓库。路由通过 `scope` 指定文档根目录：
+
+```text
+/docs/vitejs/vite/docs/guide?scope=docs/guide
+```
+
+Git 仓库只提供文档文件、相对资源和版本数据；Sidebar、默认首页和文档路由都限制在 `scope`
+目录内。未指定 `scope` 时，Viewer 应提示调用方补全文档目录。
+
 ## 4. 数据源 Provider
 
 统一抽象 GitHub、Bitbucket 和本地文件：
@@ -135,7 +145,7 @@ Markdown 第一个 H1
 ## 6. 前端自动发现流程
 
 ```text
-进入 /docs/project
+进入 /docs/project/docs?scope=docs
   ↓
 动态加载 Docs Viewer
   ↓
@@ -394,8 +404,8 @@ Phase 2 多数据源           未开始，等待 Phase 1 验收
 /docs/<GitHub 用户名>/<仓库名>/tests/fixtures/docs/README.md?scope=tests%2Ffixtures%2Fdocs
 ```
 
-`scope` 用来限制当前文档空间的根目录。普通仓库浏览不带 `scope` 时仍显示全仓库；测试夹具
-带上 `scope=tests%2Ffixtures%2Fdocs` 后，Sidebar、默认首页和后续文档导航都只作用于夹具目录。
+`scope` 用来指定当前文档空间的根目录。Viewer 不提供无范围的整个仓库浏览；测试夹具带上
+`scope=tests%2Ffixtures%2Fdocs` 后，Sidebar、默认首页和后续文档导航都只作用于夹具目录。
 
 测试清单与预期结果见 `tests/README.md`。每完成一部分功能，应先更新本节状态与测试结果，
 再继续下一个 Phase。

@@ -9,12 +9,14 @@ pnpm install
 pnpm dev
 ```
 
-打开 `/docs/:owner/:repository` 浏览公开 GitHub 仓库，例如：
+打开一个公开 GitHub 仓库中的文档空间，例如 Vite 的 `docs/guide`：
 
 ```text
-/docs/facebook/react
-/docs/facebook/react/README.md?ref=main
+/docs/vitejs/vite/docs/guide?scope=docs%2Fguide
+/docs/vitejs/vite/docs/guide/features.md?scope=docs%2Fguide&ref=main
 ```
+
+`scope` 是要渲染的文档目录。Viewer 不把整个 Git 仓库作为浏览目标；Git 仓库只负责提供文档文件、资源和版本数据。
 
 ## 当前能力
 

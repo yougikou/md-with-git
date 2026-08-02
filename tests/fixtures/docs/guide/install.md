@@ -15,5 +15,5 @@ pnpm dev
 打开文档后，浏览器地址应保持：
 
 ```text
-/docs/<owner>/<repository>/tests/fixtures/docs/guide/install.md
+/docs/<owner>/<repository>/tests/fixtures/docs/guide/install.md?scope=tests%2Ffixtures%2Fdocs
 ```
