@@ -30,6 +30,11 @@ Bitbucket Cloud 的文档空间使用 `source=bitbucket`，其中 `<owner>` 对�
 本地测试：在首页或文档页顶栏选择本地文件夹，选择 `tests/fixtures/docs` 目录后，Viewer 会按需只读该文件夹，不上传、不复制整目录，也不会将本地 Markdown 写入 IndexedDB。
 浏览器应弹出文件夹选择器；如果浏览器不支持原生目录选择，则使用目录上传兼容模式。
 
+本地 Git 测试：使用支持 File System Access API 的浏览器选择一个 Git 仓库根目录；如果要限制到
+仓库中的文档夹具，可在本地文档 URL 后追加 `&scope=tests%2Ffixtures%2Fdocs`。发现 `.git/HEAD`
+后，顶栏应出现 VERSION 选择器，并可打开历史和版本比较。目录上传回退模式不保证包含隐藏的
+`.git` 文件，因此只能验证普通本地文件夹模式。
+
 ## 验收清单
 
 - [ ] 进入测试首页后，左侧 Sidebar 只显示 `tests/fixtures/docs` 下的 `guide`、`api` 和 `examples` 分区，不显示仓库其它目录。
@@ -59,6 +64,9 @@ Bitbucket Cloud 的文档空间使用 `source=bitbucket`，其中 `<owner>` 对�
 - [ ] 直接打开 Diff 但缺少 `from` 或 `to` 时显示明确的参数提示，不发起无效请求。
 - [ ] 两个版本没有该文件 patch 时显示“没有可显示的文件差异”，而不是把提示文本当作代码差异。
 - [ ] 本地文件夹打开 History 时显示本地模式不包含 Git 历史的提示。
+- [ ] 选择 Git 仓库根目录后，Local Provider 显示 Branch/Tag/Commit VERSION 选择器。
+- [ ] 本地 Git 仓库切换到历史 Commit 后能读取对应 Markdown 内容。
+- [ ] 本地 Git 历史页能显示 Commit 历史，并可使用“与当前版本比较”查看本地 unified diff。
 
 Phase 2 的代码级验证已通过：`tsc -b` 与 `vite build`。上面的 Provider 访问项需要在浏览器中
 使用公开仓库或本地文件夹完成验收后再勾选。

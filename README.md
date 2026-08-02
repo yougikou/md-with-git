@@ -30,7 +30,7 @@ pnpm dev
 - GFM 表格、任务列表、链接、引用与基础代码块
 - Provider 接口预留文件历史、版本比较和资源 URL
 - `tests/` 提供可推送到 GitHub 的公开仓库手动测试夹具
-- 支持 Bitbucket Cloud 文档空间、本地文件夹和相对资源 URL
+- 支持 Bitbucket Cloud 文档空间、本地文件夹、本地 Git 仓库和相对资源 URL
 
 项目蓝图见 [BLUEPRINT.md](./BLUEPRINT.md)。
 

@@ -331,6 +331,7 @@ React Router 解析路径
 LocalFolderProvider
 ├── File System Access API
 ├── 拖拽文件夹
+├── 浏览器端 `.git` 只读解析
 └── 可选 localhost 服务
 ```
 
@@ -374,8 +375,12 @@ LocalFolderProvider
   IndexedDB Markdown 缓存。
 - 原生目录选择模式会在 IndexedDB 中保存文件句柄和相对路径，以便刷新页面后恢复只读会话；不保存
   本地文件内容。旧浏览器的文件选择回退模式无法持久化句柄，失效后需要重新选择目录。
-- 本地文件夹模式不显示 Git VERSION；若未来要读取本地工作树的 `.git` 历史，需要桌面端或
-  localhost 辅助服务，不能从浏览器文件句柄中直接推断。
+- 普通本地文件夹模式不显示 Git VERSION；若未选择仓库根目录或当前浏览器无法读取隐藏的
+  `.git` 文件，则继续作为无版本的只读文件夹运行。
+- 选择 Git 仓库根目录且原生 File System Access API 能读取 `.git` 时，`LocalFolderProvider`
+  会使用浏览器端 Git 解析器读取 HEAD、Branch、Tag、Commit 历史和版本内容，并复用 History
+  与 Diff 接口；只读取对象，不修改或上传本地仓库。目录上传回退模式通常不会提供隐藏的 `.git`
+  文件，因此会继续作为普通本地文件夹运行。
 - `scope` 仍然是文档空间根目录，Provider 的文件树和渲染路由不会越过该边界。
 
 进入条件：Phase 1 的 GitHub 公共仓库手动验收通过，并完成 `tests/` 中的测试夹具检查。
@@ -553,6 +558,10 @@ Phase 4 第一批实现位置：`src/features/docs/HistoryView.tsx` 展示当前
 文档页只提供 History 入口；历史列表中的“查看该历史版本”会切换当前文档的 `ref`，不跳转到
 GitHub/Bitbucket 原生网站；“与当前版本比较”以当前查看版本为比较目标。Diff 页面要求显式提供
 `from` 和 `to`，本地文件夹会明确提示不包含 Git 历史。
+
+本地 Git 仓库 Provider 实现位于 `src/features/docs/providers/LocalGitRepository.ts`，由
+`LocalFolderProvider` 自动检测 `.git/HEAD` 后启用。它支持只读 refs、版本文件读取、文件历史和
+基础 unified diff；普通文件夹仍保持无版本历史的行为。
 
 测试清单与预期结果见 `tests/README.md`。每完成一部分功能，应先更新本节状态与测试结果，
 再继续下一个 Phase。

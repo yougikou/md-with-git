@@ -63,7 +63,7 @@ function HomePage() {
           <Link className="button button-primary" to="/docs/vitejs/vite/docs/guide?scope=docs%2Fguide">打开示例文档 <span>↗</span></Link>
           <LocalFolderPicker onSelect={openLocalFolder} />
         </div>
-        <div className="local-mode-note"><span className="eyebrow">LOCAL MODE</span><span>仅按需只读你选择的文件夹，不上传、不复制整目录。</span></div>
+        <div className="local-mode-note"><span className="eyebrow">LOCAL MODE</span><span>仅按需只读你选择的文件夹；选择仓库根目录时可读取本地 Git 版本，不上传、不复制整目录。</span></div>
         <div className="feature-strip">
           <div><strong>01</strong><span>文档空间</span></div>
           <div><strong>02</strong><span>GFM Markdown</span></div>
