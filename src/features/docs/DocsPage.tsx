@@ -12,6 +12,9 @@ import type { ImgHTMLAttributes } from 'react';
 import { parse as parseYaml } from 'yaml';
 import { useDocsRendererRegistry } from './renderers';
 import type { DocsRendererRegistry, YamlBlockContext } from './renderers';
+import { HistoryView } from './HistoryView';
+import { DiffView } from './DiffView';
+import type { Commit, DiffResult } from './types';
 
 const githubProvider = new GitHubProvider();
 const bitbucketProvider = new BitbucketProvider();
@@ -76,6 +79,10 @@ function rendererNameFromMeta(meta: string): string | undefined {
   return meta.match(/(?:^|\s)renderer=([^\s]+)/)?.[1];
 }
 
+function encodeDocumentUrl(owner: string, repository: string, path: string): string {
+  return `/docs/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}/${path.split('/').map(encodeURIComponent).join('/')}`;
+}
+
 function YamlRendererBlock({ name, source, registry, context }: { name: string; source: string; registry: DocsRendererRegistry; context: YamlBlockContext }) {
   let value: unknown;
   try {
@@ -102,12 +109,20 @@ export default function DocsPage() {
   const [contentLoading, setContentLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [history, setHistory] = useState<Commit[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [diff, setDiff] = useState<DiffResult | null>(null);
+  const [diffLoading, setDiffLoading] = useState(false);
+  const [diffError, setDiffError] = useState<string | null>(null);
   const rendererRegistry = useDocsRendererRegistry();
 
   const segments = wildcard.split('/').filter(Boolean);
   const owner = segments[0] || '';
   const repository = segments[1] || '';
-  const requestedPath = segments.slice(2).join('/');
+  const routedPath = segments.slice(2).join('/');
+  const viewMode = routedPath.endsWith('/history') ? 'history' : routedPath.endsWith('/diff') ? 'diff' : 'document';
+  const requestedPath = viewMode === 'document' ? routedPath : routedPath.slice(0, routedPath.lastIndexOf('/'));
   const ref = searchParams.get('ref') || undefined;
   const scope = searchParams.get('scope')?.replace(/^\/+|\/+$/g, '') || undefined;
   const sourceKind = sourceFromQuery(searchParams.get('source'));
@@ -158,6 +173,7 @@ export default function DocsPage() {
 
   useEffect(() => {
     if (!selectedDocument || !provider) return;
+    if (viewMode !== 'document') { setContentLoading(false); setSource(null); return; }
     const query = { owner, repository, path: selectedDocument.path, ref: activeRef };
     const cacheKey = provider.kind === 'local' ? null : documentCacheKey(provider.kind, { ...query, owner: owner });
     let cancelled = false;
@@ -168,7 +184,26 @@ export default function DocsPage() {
     }) : provider.getFile(query);
     readContent.then((content) => { if (!cancelled) setSource({ path: selectedDocument.path, content }); }).catch((reason: unknown) => { if (!cancelled) setError(reason instanceof Error ? reason.message : '无法读取 Markdown 文件。'); }).finally(() => { if (!cancelled) setContentLoading(false); });
     return () => { cancelled = true; };
-  }, [activeRef, localId, owner, provider, repository, selectedDocument, sourceKind]);
+  }, [activeRef, localId, owner, provider, repository, selectedDocument, sourceKind, viewMode]);
+
+  const fromRef = searchParams.get('from') || undefined;
+  const toRef = searchParams.get('to') || undefined;
+
+  useEffect(() => {
+    if (viewMode !== 'history' || !selectedDocument || !provider) return;
+    let cancelled = false;
+    setHistoryLoading(true); setHistoryError(null); setHistory([]);
+    provider.getFileHistory({ owner, repository, path: selectedDocument.path, ref: activeRef, limit: 20 }).then((commits) => { if (!cancelled) setHistory(commits); }).catch((reason: unknown) => { if (!cancelled) setHistoryError(reason instanceof Error ? reason.message : '无法读取文件历史。'); }).finally(() => { if (!cancelled) setHistoryLoading(false); });
+    return () => { cancelled = true; };
+  }, [activeRef, owner, provider, repository, selectedDocument, viewMode]);
+
+  useEffect(() => {
+    if (viewMode !== 'diff' || !selectedDocument || !provider || !fromRef || !toRef) return;
+    let cancelled = false;
+    setDiffLoading(true); setDiffError(null); setDiff(null);
+    provider.compare({ owner, repository, path: selectedDocument.path, ref: activeRef, from: fromRef, to: toRef }).then((result) => { if (!cancelled) setDiff(result); }).catch((reason: unknown) => { if (!cancelled) setDiffError(reason instanceof Error ? reason.message : '无法比较文档版本。'); }).finally(() => { if (!cancelled) setDiffLoading(false); });
+    return () => { cancelled = true; };
+  }, [activeRef, fromRef, owner, provider, repository, selectedDocument, toRef, viewMode]);
 
   if (loading) return <div className="docs-shell"><Topbar owner={owner} repository={repository} ref={ref} defaultRef={defaultRef} scope={scope} source={sourceKind} refs={refs} onRefChange={changeRef} onOpenLocal={openLocalFolder} onMenu={() => setSidebarOpen(true)} /><LoadingState source={sourceKind} /></div>;
   if (error && !tree.length) return <div className="docs-shell"><Topbar owner={owner} repository={repository} ref={ref} defaultRef={defaultRef} scope={scope} source={sourceKind} refs={refs} onRefChange={changeRef} onOpenLocal={openLocalFolder} onMenu={() => setSidebarOpen(true)} /><ErrorState message={error} /></div>;
@@ -176,7 +211,17 @@ export default function DocsPage() {
   if (!selectedDocument) return <div className="docs-shell"><Topbar owner={owner} repository={repository} ref={ref} defaultRef={defaultRef} scope={scope} source={sourceKind} refs={refs} onRefChange={changeRef} onOpenLocal={openLocalFolder} onMenu={() => setSidebarOpen(true)} /><ErrorState message="找不到请求的 Markdown 文档，请从左侧目录选择一个页面。" /></div>;
 
   const parsed = source ? parseFrontmatter(source.content) : null;
-  return <div className="docs-shell"><Topbar owner={owner} repository={repository} ref={ref} defaultRef={defaultRef} scope={scope} source={sourceKind} refs={refs} onRefChange={changeRef} onOpenLocal={openLocalFolder} onMenu={() => setSidebarOpen(true)} /><div className={`docs-layout ${sidebarOpen ? 'sidebar-visible' : ''}`}><div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} /><Sidebar tree={tree} activePath={activePath} onNavigate={openDocument} /><main className="docs-main"><div className="document-wrap">{contentLoading || !parsed ? <div className="document-skeleton"><div /><div /><div /><div /></div> : <><div className="document-meta"><span>{selectedDocument.path}</span>{activeRef && <span className="ref-badge">{activeRef.slice(0, 12)}</span>}</div><article className="markdown-body"><h1>{parsed.title}</h1><ReactMarkdown remarkPlugins={[remarkGfm]} components={{ h1: () => null, a: ({ href, children, ...props }) => <a href={href} {...props} target={href?.startsWith('http') ? '_blank' : undefined} rel={href?.startsWith('http') ? 'noreferrer' : undefined}>{children}</a>, img: ({ src, alt, ...props }) => provider ? <MarkdownImage src={src} alt={alt} provider={provider} owner={owner} repository={repository} documentPath={selectedDocument.path} assetRef={activeRef} {...props} /> : null, code: ({ className, children, node, ...props }) => { const language = className?.replace('language-', ''); const rendererName = language === 'yaml' ? rendererNameFromMeta(readCodeMeta(node)) : undefined; if (rendererName) return <YamlRendererBlock name={rendererName} source={String(children).trim()} registry={rendererRegistry} context={{ documentPath: selectedDocument.path, repository, ref: activeRef, scope }} />; return <code className={`${className || ''} code-inline`} data-language={language} {...props}>{children}</code>; } }}>{parsed.content}</ReactMarkdown></article><div className="document-footer"><span>Powered by Git MD Viewer</span><span className="footer-note">{sourceKind === 'local' ? 'Local folder · read-only' : `${sourceKind} · ${scope}`}</span></div></>}</div></main></div></div>;
+  const viewQuery = new URLSearchParams(searchParams);
+  viewQuery.delete('from');
+  viewQuery.delete('to');
+  const viewQueryString = viewQuery.toString();
+  const documentUrl = encodeDocumentUrl(owner, repository, selectedDocument.path);
+  const documentHref = `${documentUrl}${viewQueryString ? `?${viewQueryString}` : ''}`;
+  const historyPath = `${documentUrl}/history${viewQueryString ? `?${viewQueryString}` : ''}`;
+  const diffPath = `${documentUrl}/diff${viewQueryString ? `?${viewQueryString}` : ''}`;
+  const diffViewError = viewMode === 'diff' && (!fromRef || !toRef) ? '请在 diff URL 中提供 from 和 to 两个版本，例如 ?from=abc123&to=def456。' : diffError;
+  const viewContent = viewMode === 'history' ? <HistoryView commits={history} loading={historyLoading} error={historyError} documentPath={selectedDocument.path} historyPath={documentHref} diffPath={diffPath} sourceKind={sourceKind} /> : viewMode === 'diff' ? <DiffView diff={diff} loading={diffLoading} error={diffViewError} historyPath={historyPath} /> : contentLoading || !parsed ? <div className="document-skeleton"><div /><div /><div /><div /></div> : <><div className="document-meta"><span>{selectedDocument.path}</span>{activeRef && <span className="ref-badge">{activeRef.slice(0, 12)}</span>}<span className="document-actions"><Link to={historyPath}>History</Link><Link to={diffPath}>Diff</Link></span></div><article className="markdown-body"><h1>{parsed.title}</h1><ReactMarkdown remarkPlugins={[remarkGfm]} components={{ h1: () => null, a: ({ href, children, ...props }) => <a href={href} {...props} target={href?.startsWith('http') ? '_blank' : undefined} rel={href?.startsWith('http') ? 'noreferrer' : undefined}>{children}</a>, img: ({ src, alt, ...props }) => provider ? <MarkdownImage src={src} alt={alt} provider={provider} owner={owner} repository={repository} documentPath={selectedDocument.path} assetRef={activeRef} {...props} /> : null, code: ({ className, children, node, ...props }) => { const language = className?.replace('language-', ''); const rendererName = language === 'yaml' ? rendererNameFromMeta(readCodeMeta(node)) : undefined; if (rendererName) return <YamlRendererBlock name={rendererName} source={String(children).trim()} registry={rendererRegistry} context={{ documentPath: selectedDocument.path, repository, ref: activeRef, scope }} />; return <code className={`${className || ''} code-inline`} data-language={language} {...props}>{children}</code>; } }}>{parsed.content}</ReactMarkdown></article></>;
+  return <div className="docs-shell"><Topbar owner={owner} repository={repository} ref={ref} defaultRef={defaultRef} scope={scope} source={sourceKind} refs={refs} onRefChange={changeRef} onOpenLocal={openLocalFolder} onMenu={() => setSidebarOpen(true)} /><div className={`docs-layout ${sidebarOpen ? 'sidebar-visible' : ''}`}><div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} /><Sidebar tree={tree} activePath={activePath} onNavigate={openDocument} /><main className="docs-main"><div className="document-wrap">{viewContent}{viewMode === 'document' && !contentLoading && parsed && <div className="document-footer"><span>Powered by Git MD Viewer</span><span className="footer-note">{sourceKind === 'local' ? 'Local folder · read-only' : `${sourceKind} · ${scope}`}</span></div>}</div></main></div></div>;
 }
 
 function Topbar({ owner, repository, ref, defaultRef, scope, source, refs, onRefChange, onOpenLocal, onMenu }: { owner: string; repository: string; ref?: string; defaultRef?: string; scope?: string; source: SourceKind; refs: RepositoryRef[]; onRefChange: (value: string) => void; onOpenLocal: (files: LocalFolderSelection[]) => void; onMenu: () => void }) {

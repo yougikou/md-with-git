@@ -284,13 +284,13 @@ lines: 10-40
 文件历史：
 
 ```text
-/docs/project/guide/install/history
+/docs/project/guide/install.md/history
 ```
 
 版本差异：
 
 ```text
-/docs/project/guide/install/diff?from=abc123&to=def456
+/docs/project/guide/install.md/diff?from=abc123&to=def456
 ```
 
 支持：
@@ -467,10 +467,10 @@ YAML fenced code block
 
 ### Phase 4：版本功能
 
-- Commit 历史
-- 指定版本浏览
+- [x] Commit 历史
+- [x] 指定版本浏览
 - 文件历史
-- Unified Diff
+- [x] Unified Diff
 - Split Diff
 - 变更文件列表
 
@@ -545,6 +545,11 @@ Phase 3 第一批实现位置：`src/features/docs/renderers/` 只提供 registr
 解析协议；`examples/standalone-host/src/docs-renderers.tsx` 提供 `change-history` 示例渲染器。
 `src/features/docs/DocsPage.tsx` 只在 YAML fenced block 明确提供 `renderer=<name>` 时解析数据。
 未知 renderer 和 YAML 解析错误均保留原始代码并显示诊断，不从 Git 文档加载代码。
+
+Phase 4 第一批实现位置：`src/features/docs/HistoryView.tsx` 展示当前 Markdown 文件的 Commit
+历史，`src/features/docs/DiffView.tsx` 展示 GitHub/Bitbucket Provider 返回的 unified patch。
+文档页的 History / Diff 操作会保留当前仓库、文档目录和版本上下文；历史项可以生成相邻 Commit
+比较链接。Diff 页面要求显式提供 `from` 和 `to`，本地文件夹会明确提示不包含 Git 历史。
 
 测试清单与预期结果见 `tests/README.md`。每完成一部分功能，应先更新本节状态与测试结果，
 再继续下一个 Phase。

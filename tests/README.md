@@ -18,6 +18,7 @@
 /docs/<owner>/<repository>/tests/fixtures/docs/guide/advanced/plugins.md?scope=tests%2Ffixtures%2Fdocs
 /docs/<owner>/<repository>/tests/fixtures/docs/api/button.md?scope=tests%2Ffixtures%2Fdocs
 /docs/<owner>/<repository>/tests/fixtures/docs/examples/change-history.md?scope=tests%2Ffixtures%2Fdocs
+/docs/<owner>/<repository>/tests/fixtures/docs/guide/install.md/history?scope=tests%2Ffixtures%2Fdocs
 ```
 
 Bitbucket Cloud 的文档空间使用 `source=bitbucket`，其中 `<owner>` 对应 workspace：
@@ -50,6 +51,11 @@ Bitbucket Cloud 的文档空间使用 `source=bitbucket`，其中 `<owner>` 对�
 - [ ] 变更履历中第 4 个及更早版本默认收起，点击“查看更早的变更”后可展开。
 - [ ] `renderer=not-installed` 保留原始 YAML，并显示“未注册 YAML 渲染器”诊断。
 - [ ] YAML 解析失败时保留原始代码并显示解析错误，不执行文档中的 JavaScript。
+- [ ] GitHub/Bitbucket 文档页显示 `History` 和 `Diff` 入口。
+- [ ] `.../guide/install.md/history?scope=tests%2Ffixtures%2Fdocs` 能显示文件 Commit 历史；每条历史包含作者、日期、短 SHA 和提交链接（Provider 返回时）。
+- [ ] 历史列表中的“与上一个版本比较”能打开 Diff 页面，并显示 from/to SHA 与 unified patch。
+- [ ] 直接打开 Diff 但缺少 `from` 或 `to` 时显示明确的参数提示，不发起无效请求。
+- [ ] 本地文件夹打开 History 时显示本地模式不包含 Git 历史的提示。
 
 Phase 2 的代码级验证已通过：`tsc -b` 与 `vite build`。上面的 Provider 访问项需要在浏览器中
 使用公开仓库或本地文件夹完成验收后再勾选。

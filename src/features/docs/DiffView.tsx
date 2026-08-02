@@ -1,0 +1,5 @@
+import type { DiffResult } from './types';
+
+export function DiffView({ diff, loading, error, historyPath }: { diff: DiffResult | null; loading: boolean; error: string | null; historyPath: string }) {
+  return <section className="diff-view"><div className="view-heading"><div><span className="eyebrow">DOCUMENT DIFF</span><h1>{diff?.path || '版本比较'}</h1></div><a className="button button-quiet" href={historyPath}>返回历史</a></div>{loading && <div className="inline-loading"><div className="spinner" />正在计算版本差异…</div>}{error && <div className="inline-error">{error}</div>}{!loading && !error && diff && <><div className="diff-summary"><span>from <code>{diff.from.slice(0, 12)}</code></span><span>→</span><span>to <code>{diff.to.slice(0, 12)}</code></span></div><pre className="diff-block">{diff.patch.split('\n').map((line, index) => <span className={`diff-line ${line.startsWith('+') && !line.startsWith('+++') ? 'added' : line.startsWith('-') && !line.startsWith('---') ? 'removed' : line.startsWith('@@') ? 'hunk' : ''}`} key={`${index}-${line}`}>{line || ' '}\n</span>)}</pre></>}</section>;
+}
