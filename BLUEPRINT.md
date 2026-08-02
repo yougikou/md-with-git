@@ -293,14 +293,20 @@ LocalFolderProvider
 
 ### Phase 1：核心 Viewer
 
-- React 宿主集成
-- `/docs/*` 路由
-- 动态导入
-- GitHub 公共仓库
-- 自动 Markdown Tree
-- Sidebar
-- Markdown 渲染
-- 基础代码块
+- [x] React 宿主集成
+- [x] `/docs/*` 路由
+- [x] 动态导入
+- [x] GitHub 公共仓库
+- [x] 自动 Markdown Tree
+- [x] Sidebar
+- [x] Markdown 渲染
+- [x] 基础代码块
+
+实现位置：`src/main.tsx`、`src/features/docs/`。
+
+当前实现说明：目录树发现阶段使用路径生成初始标题；打开文档后，正文标题支持
+`frontmatter.title` → 第一个 H1 → 文件名的优先级。frontmatter 的 `order` 目前只作为
+测试夹具保留，尚未接入目录排序。
 
 ### Phase 2：多数据源
 
@@ -309,6 +315,8 @@ LocalFolderProvider
 - 图片和相对路径资源
 - IndexedDB 缓存
 - Branch / Tag 切换
+
+进入条件：Phase 1 的 GitHub 公共仓库手动验收通过，并完成 `tests/` 中的测试夹具检查。
 
 ### Phase 3：源码与组件
 
@@ -366,3 +374,25 @@ React Demo 默认隔离运行
 ```
 
 最终产品不是单纯的 Docsify 替代品，而是一个可嵌入 React 产品的 Git Markdown Documentation Viewer。
+
+## 16. 当前进度与测试策略
+
+截至 2026-08-02：
+
+```text
+Phase 1 核心 Viewer       已实现
+自动化类型检查             已通过：tsc -b
+生产构建                   已通过：vite build
+GitHub 真实仓库验收        待使用公开仓库路径手动确认
+Phase 2 多数据源           未开始，等待 Phase 1 验收
+```
+
+仓库内的 `tests/` 是可直接推送到 GitHub 的手动测试夹具，不依赖后端或私有数据。推送后，
+可以通过下面的路径追加验证：
+
+```text
+/docs/<GitHub 用户名>/<仓库名>/tests/fixtures/docs/README.md
+```
+
+测试清单与预期结果见 `tests/README.md`。每完成一部分功能，应先更新本节状态与测试结果，
+再继续下一个 Phase。

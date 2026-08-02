@@ -25,5 +25,16 @@ pnpm dev
 - frontmatter 标题、首个 H1 标题和文件名的解析
 - GFM 表格、任务列表、链接、引用与基础代码块
 - Provider 接口预留文件历史、版本比较和资源 URL
+- `tests/` 提供可推送到 GitHub 的公开仓库手动测试夹具
 
 项目蓝图见 [BLUEPRINT.md](./BLUEPRINT.md)。
+
+## 手动测试夹具
+
+推送仓库后，可以用下面的路径验证测试内容：
+
+```text
+/docs/<GitHub 用户名>/<仓库名>/tests/fixtures/docs/README.md
+```
+
+检查项见 [tests/README.md](./tests/README.md)。
