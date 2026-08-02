@@ -37,3 +37,15 @@ export function isMarkdown(path: string): boolean {
 export function isIndexFile(path: string): boolean {
   return /(^|\/)README\.md$|(^|\/)index\.md$/i.test(path);
 }
+
+export function resolveAssetPath(documentPath: string, assetPath: string): string {
+  if (/^(?:[a-z]+:)?\/\//i.test(assetPath) || assetPath.startsWith('data:') || assetPath.startsWith('/')) return assetPath;
+  const parts = [...documentPath.split('/').slice(0, -1), ...assetPath.split('/')];
+  const normalized: string[] = [];
+  for (const part of parts) {
+    if (!part || part === '.') continue;
+    if (part === '..') normalized.pop();
+    else normalized.push(part);
+  }
+  return normalized.join('/');
+}

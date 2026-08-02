@@ -1,5 +1,5 @@
 import type {
-  AssetQuery, Commit, CompareQuery, DiffResult, FileQuery, HistoryQuery, RepositoryEntry, RepositoryProvider, TreeQuery,
+  AssetQuery, Commit, CompareQuery, DiffResult, FileQuery, HistoryQuery, RepositoryEntry, RepositoryProvider, RepositoryRef, TreeQuery,
 } from '../types';
 
 interface GitHubContent {
@@ -17,7 +17,13 @@ interface GitHubCommit {
   commit: { message: string; author?: { name?: string; date?: string } };
 }
 
+interface GitHubRef {
+  name: string;
+  commit?: { sha?: string };
+}
+
 export class GitHubProvider implements RepositoryProvider {
+  readonly kind = 'github' as const;
   private readonly apiBase = 'https://api.github.com';
 
   private async request<T>(url: string): Promise<T> {
@@ -38,7 +44,22 @@ export class GitHubProvider implements RepositoryProvider {
     const defaultBranch = input.ref ? input.ref : (await this.request<{ default_branch: string }>(this.repo(input))).default_branch;
     const data = await this.request<{ tree: Array<{ path: string; type: string; sha?: string; size?: number }>; truncated?: boolean }>(`${this.repo(input)}/git/trees/${encodeURIComponent(defaultBranch)}?recursive=1`);
     if (data.truncated) console.warn('GitHub tree is truncated; very large repositories may not show every file.');
-    return data.tree.map((entry) => ({ path: entry.path, type: entry.type === 'tree' ? 'directory' : 'file', sha: entry.sha, size: entry.size }));
+    const rootPath = input.rootPath?.replace(/^\/+|\/+$/g, '');
+    return data.tree
+      .filter((entry) => !rootPath || entry.path === rootPath || entry.path.startsWith(`${rootPath}/`))
+      .map((entry) => ({ path: entry.path, type: entry.type === 'tree' ? 'directory' : 'file', sha: entry.sha, size: entry.size }));
+  }
+
+  async getRefs(input: TreeQuery): Promise<RepositoryRef[]> {
+    const [repository, branches, tags] = await Promise.all([
+      this.request<{ default_branch?: string }>(this.repo(input)),
+      this.request<GitHubRef[]>(`${this.repo(input)}/branches?per_page=100`),
+      this.request<GitHubRef[]>(`${this.repo(input)}/tags?per_page=100`),
+    ]);
+    return [
+      ...branches.map((ref) => ({ name: ref.name, type: 'branch' as const, sha: ref.commit?.sha, isDefault: ref.name === repository.default_branch })),
+      ...tags.map((ref) => ({ name: ref.name, type: 'tag' as const, sha: ref.commit?.sha })),
+    ];
   }
 
   async getFile(input: FileQuery): Promise<string> {

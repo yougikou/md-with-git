@@ -19,6 +19,14 @@
 /docs/<owner>/<repository>/tests/fixtures/docs/api/button.md?scope=tests%2Ffixtures%2Fdocs
 ```
 
+Bitbucket Cloud 的文档空间使用 `source=bitbucket`，其中 `<owner>` 对应 workspace：
+
+```text
+/docs/<workspace>/<repository>/docs?source=bitbucket&scope=docs
+```
+
+本地测试：在首页选择本地文件夹，选择 `tests/fixtures/docs` 目录后，Viewer 会在不上传文件的情况下读取该文件夹。
+
 ## 验收清单
 
 - [ ] 进入测试首页后，左侧 Sidebar 只显示 `tests/fixtures/docs` 下的 `guide`、`api` 和 `examples` 分区，不显示仓库其它目录。
@@ -27,7 +35,14 @@
 - [ ] `guide/advanced/plugins.md` 能显示多级展开树。
 - [ ] `api/button.md` 的表格、任务列表和代码块正常渲染。
 - [ ] `examples/markdown.md` 的引用、链接、列表和 GFM 内容正常渲染。
+- [ ] `examples/assets.md` 能显示相对路径 SVG 图片。
 - [ ] `_ignored.md` 不应出现在 Sidebar 中。
+- [ ] 首页的本地文件夹入口能读取选中的 fixtures，而不是访问服务器。
+- [ ] Bitbucket URL 使用 `source=bitbucket` 后能读取公开仓库文档空间。
+- [ ] VERSION 选择器能切换 GitHub/Bitbucket 的 branch 或 tag。
+
+Phase 2 的代码级验证已通过：`tsc -b` 与 `vite build`。上面的 Provider 访问项需要在浏览器中
+使用公开仓库或本地文件夹完成验收后再勾选。
 - [ ] 移动端宽度下可通过菜单打开和关闭 Sidebar。
 - [ ] 添加 `?ref=<branch-or-commit>` 后，页面仍能从指定 Git 版本读取。
 

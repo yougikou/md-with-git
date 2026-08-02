@@ -320,11 +320,18 @@ LocalFolderProvider
 
 ### Phase 2：多数据源
 
-- Bitbucket Provider
-- 本地文件夹 Provider
-- 图片和相对路径资源
-- IndexedDB 缓存
-- Branch / Tag 切换
+- [x] Bitbucket Provider
+- [x] 本地文件夹 Provider
+- [x] 图片和相对路径资源
+- [x] IndexedDB Markdown 缓存
+- [x] Branch / Tag 切换
+
+实现说明：
+
+- Bitbucket Cloud 通过 `source=bitbucket` 选择，`owner` 对应 workspace，`repository` 对应 repo slug。
+- 本地文件夹通过首页的目录选择入口载入，文件只在浏览器内读取，不上传到服务器；当前优先使用
+  `webkitdirectory` 兼容入口，File System Access API 和拖拽入口留作增强。
+- `scope` 仍然是文档空间根目录，Provider 的文件树和渲染路由不会越过该边界。
 
 进入条件：Phase 1 的 GitHub 公共仓库手动验收通过，并完成 `tests/` 中的测试夹具检查。
 
@@ -394,7 +401,7 @@ Phase 1 核心 Viewer       已实现
 自动化类型检查             已通过：tsc -b
 生产构建                   已通过：vite build
 GitHub 真实仓库验收        待使用公开仓库路径手动确认
-Phase 2 多数据源           未开始，等待 Phase 1 验收
+Phase 2 多数据源           已实现，待 Bitbucket/本地公开手动验收
 ```
 
 仓库内的 `tests/` 是可直接推送到 GitHub 的手动测试夹具，不依赖后端或私有数据。推送后，
@@ -406,6 +413,9 @@ Phase 2 多数据源           未开始，等待 Phase 1 验收
 
 `scope` 用来指定当前文档空间的根目录。Viewer 不提供无范围的整个仓库浏览；测试夹具带上
 `scope=tests%2Ffixtures%2Fdocs` 后，Sidebar、默认首页和后续文档导航都只作用于夹具目录。
+
+Phase 2 的来源与版本测试入口见 `tests/README.md`，包括 GitHub、Bitbucket、本地文件夹、相对
+资源和 Branch/Tag 切换。
 
 测试清单与预期结果见 `tests/README.md`。每完成一部分功能，应先更新本节状态与测试结果，
 再继续下一个 Phase。

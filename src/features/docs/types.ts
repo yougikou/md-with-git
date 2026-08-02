@@ -2,6 +2,7 @@ export interface TreeQuery {
   owner: string;
   repository: string;
   ref?: string;
+  rootPath?: string;
 }
 
 export interface FileQuery extends TreeQuery {
@@ -42,10 +43,19 @@ export interface DiffResult {
   patch: string;
 }
 
+export interface RepositoryRef {
+  name: string;
+  type: 'branch' | 'tag';
+  sha?: string;
+  isDefault?: boolean;
+}
+
 export interface RepositoryProvider {
+  readonly kind: 'github' | 'bitbucket' | 'local';
   getTree(input: TreeQuery): Promise<RepositoryEntry[]>;
   getFile(input: FileQuery): Promise<string>;
   getAssetUrl(input: AssetQuery): string;
+  getRefs(input: TreeQuery): Promise<RepositoryRef[]>;
   getFileHistory(input: HistoryQuery): Promise<Commit[]>;
   compare(input: CompareQuery): Promise<DiffResult>;
 }
