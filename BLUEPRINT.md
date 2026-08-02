@@ -572,7 +572,9 @@ GitHub/Bitbucket 原生网站；“与当前版本比较”以当前查看版本
 `tests/local-git-browser-server.mjs` 与 `tests/run-local-git-browser-harness.mjs` 提供只读的 Chromium 回归流程；
 它会验证 refs、HEAD 文档树和 scope 内 Markdown，不复制、不上传或缓存目标仓库内容。
 三类设置入口统一为设置卡片：本地 Markdown 选择后先显示已授权目录名；本地 Git 只选择一次项目根目录，
-并从同一批文件生成树状 scope；在线 Git、普通本地文件夹和本地 Git 的设置项都通过
+并从同一批文件生成树状 scope。原生 File System Access API 模式下，选择阶段只读取项目根目录第一层，
+scope 树默认收起，用户展开目录时再按层读取；点击打开文档空间时才递归读取 scope 所需的完整文件，并在
+读取期间显示加载状态。在线 Git、普通本地文件夹和本地 Git 的设置项都通过
 `src/features/docs/setupPersistence.ts` 保存在浏览器 localStorage 中。原生目录句柄仍只保存在 IndexedDB，
 不保存文件内容；浏览器不会暴露本地绝对路径，因此界面显示目录名或浏览器提供的相对路径。
 

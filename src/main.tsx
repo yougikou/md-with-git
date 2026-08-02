@@ -1,7 +1,7 @@
 import { FormEvent, StrictMode, Suspense, lazy, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Link, Route, Routes, useNavigate, useSearchParams } from 'react-router-dom';
-import { LocalFolderPicker, type LocalFolderSelection } from './features/docs/LocalFolderPicker';
+import { collectDirectoryFiles, LocalFolderPicker, type LocalDirectoryHandle, type LocalFolderSelection } from './features/docs/LocalFolderPicker';
 import { loadLocalFolderHandles } from './features/docs/localPersistence';
 import { LocalScopeTree } from './features/docs/LocalScopeTree';
 import { registerLocalFolder, registerLocalGitRepository } from './features/docs/providers';
@@ -80,28 +80,37 @@ function LocalFolderSetup() {
   const [localId, setLocalId] = useState(initial.localId || '');
   const [selectedPath, setSelectedPath] = useState(initial.path);
   const [error, setError] = useState('');
+  const [rootDirectory, setRootDirectory] = useState<FileSystemDirectoryHandle>();
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (!initial.localId) return;
     loadLocalFolderHandles(initial.localId).then(setSelection).catch(() => { /* 权限失效时保留路径，等待用户重新授权。 */ });
   }, [initial.localId]);
 
-  const selectFolder = (files: LocalFolderSelection[], path?: string) => {
-    const nextId = registerLocalFolder(files);
+  const selectFolder = (files: LocalFolderSelection[], path?: string, details?: { rootDirectory?: FileSystemDirectoryHandle }) => {
     const nextPath = selectionDisplayPath(files, path || '');
-    setSelection(files); setLocalId(nextId); setSelectedPath(nextPath); setError('');
-    saveLocalFolderSettings({ localId: selectionIsPersistable(files) ? nextId : undefined, path: nextPath });
+    setSelection(files); setLocalId(''); setRootDirectory(details?.rootDirectory); setSelectedPath(nextPath); setError('');
+    saveLocalFolderSettings({ path: nextPath });
   };
 
-  const openFolder = (event: FormEvent<HTMLFormElement>) => {
+  const openFolder = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!localId && !selection.length) { setError('请先选择本地 Markdown 文件夹。'); return; }
-    const id = localId || registerLocalFolder(selection);
-    saveLocalFolderSettings({ localId: selectionIsPersistable(selection) ? id : undefined, path: selectedPath });
-    navigate(`/docs/local/folder?source=local&localMode=folder&localId=${encodeURIComponent(id)}`);
+    if (!localId && !selection.length && !rootDirectory) { setError('请先选择本地 Markdown 文件夹。'); return; }
+    setLoading(true); setError('');
+    try {
+      const files = rootDirectory ? await collectDirectoryFiles(rootDirectory) : selection;
+      const id = localId || registerLocalFolder(files);
+      saveLocalFolderSettings({ localId: rootDirectory || selectionIsPersistable(files) ? id : undefined, path: selectedPath });
+      navigate(`/docs/local/folder?source=local&localMode=folder&localId=${encodeURIComponent(id)}`);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '无法读取所选文件夹。');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  return <section className="setup-card local-folder-form-card"><div className="repository-form-heading"><div><span className="eyebrow">OPEN LOCAL MARKDOWN</span><h2>选择本地 Markdown 文件夹</h2></div><span className="form-hint">浏览器只读取你明确选择的文件</span></div><form onSubmit={openFolder}><div className="local-folder-setup-grid"><div className="setup-field"><span className="local-git-label">文档文件夹</span><LocalFolderPicker label="选择本地 Markdown 文件夹" onSelect={selectFolder} /><output className="selected-folder-path">{selectedPath || '尚未选择文件夹'}</output><p className="local-git-selection">{selection.length ? `已选择 ${selection.length} 个只读文件` : '选择后会显示文件夹名称，并可继续打开文档。'} 浏览器不会暴露绝对本地路径。</p></div><button className="button button-primary setup-submit" type="submit">打开本地文档 <span>→</span></button></div>{error && <p className="local-git-error">{error}</p>}</form></section>;
+  return <section className="setup-card local-folder-form-card"><div className="repository-form-heading"><div><span className="eyebrow">OPEN LOCAL MARKDOWN</span><h2>选择本地 Markdown 文件夹</h2></div><span className="form-hint">浏览器只读取你明确选择的文件</span></div><form onSubmit={openFolder}><div className="local-folder-setup-grid"><div className="setup-field"><span className="local-git-label">文档文件夹</span><LocalFolderPicker label="选择本地 Markdown 文件夹" onSelect={selectFolder} /><output className="selected-folder-path">{selectedPath || '尚未选择文件夹'}</output><p className="local-git-selection">{loading ? '正在读取文件夹内容，请稍候…' : rootDirectory || selection.length ? '已读取根目录，打开时再读取其余文件。' : '选择后会显示文件夹名称，并可继续打开文档。'} 浏览器不会暴露绝对本地路径。</p></div><button className="button button-primary setup-submit" type="submit" disabled={loading}>{loading ? '正在读取…' : '打开本地文档'} <span>→</span></button></div>{error && <p className="local-git-error">{error}</p>}</form></section>;
 }
 
 function LocalGitRepositorySetup() {
@@ -112,6 +121,9 @@ function LocalGitRepositorySetup() {
   const [selectedPath, setSelectedPath] = useState(initial.path);
   const [scope, setScope] = useState(initial.scope);
   const [error, setError] = useState('');
+  const [rootDirectory, setRootDirectory] = useState<FileSystemDirectoryHandle>();
+  const [rootDirectories, setRootDirectories] = useState<LocalDirectoryHandle[]>([]);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (!initial.localId) return;
@@ -119,45 +131,50 @@ function LocalGitRepositorySetup() {
   }, [initial.localId]);
 
   useEffect(() => {
-    if (selection.length && scope && !scopeExistsInSelection(selection, scope)) {
+    if (selection.length && !rootDirectory && scope && !scopeExistsInSelection(selection, scope)) {
       setScope('');
       saveLocalGitSettings({ localId: localId || undefined, path: selectedPath, scope: '' });
     }
   }, [localId, scope, selectedPath, selection]);
 
-  const selectRepository = (files: LocalFolderSelection[], path?: string) => {
-    const nextId = registerLocalGitRepository(files);
+  const selectRepository = (files: LocalFolderSelection[], path?: string, details?: { rootDirectory?: FileSystemDirectoryHandle; directories?: LocalDirectoryHandle[] }) => {
     const nextPath = selectionDisplayPath(files, path || '');
-    setSelection(files); setLocalId(nextId); setSelectedPath(nextPath); setError('');
-    saveLocalGitSettings({ localId: selectionIsPersistable(files) ? nextId : undefined, path: nextPath, scope });
+    setSelection(files); setLocalId(''); setRootDirectory(details?.rootDirectory); setRootDirectories(details?.directories || []); setSelectedPath(nextPath); setError('');
+    saveLocalGitSettings({ path: nextPath, scope });
   };
 
-  const openLocalGitRepository = (event: FormEvent<HTMLFormElement>) => {
+  const openLocalGitRepository = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const normalizedScope = scope.trim().replaceAll('\\', '/').replace(/^\/+|\/+$/g, '');
-    if (!selection.length && !localId) {
+    if (!selection.length && !localId && !rootDirectory) {
       setError('请先选择包含 .git 的项目文件夹。');
       return;
     }
-    const hasGitHead = selection.some((item) => {
-      const path = localSelectionPath(item);
-      return path === '.git/HEAD' || path.endsWith('/.git/HEAD');
-    });
-    if (!hasGitHead) {
-      setError('未读取到项目根目录下的 .git/HEAD。请使用原生文件夹选择器选择项目根目录。');
-      return;
-    }
     if (!normalizedScope) {
-      setError('请填写文档目录 scope，例如 docs 或 packages/site/docs。');
+      setError('请从树状目录中选择文档目录 scope。');
       return;
     }
-    const nextId = localId || registerLocalGitRepository(selection);
-    saveLocalGitSettings({ localId: selectionIsPersistable(selection) ? nextId : undefined, path: selectedPath, scope: normalizedScope });
-    const query = new URLSearchParams({ source: 'local', localMode: 'git', localId: nextId, scope: normalizedScope });
-    navigate(`/docs/local/git?${query.toString()}`);
+    setLoading(true); setError('');
+    try {
+      const files = rootDirectory ? await collectDirectoryFiles(rootDirectory) : selection;
+      const hasGitHead = files.some((item) => {
+        const path = localSelectionPath(item);
+        return path === '.git/HEAD' || path.endsWith('/.git/HEAD');
+      });
+      if (!hasGitHead) throw new Error('未读取到项目根目录下的 .git/HEAD。请使用原生文件夹选择器选择项目根目录。');
+      if (!scopeExistsInSelection(files, normalizedScope)) throw new Error(`目录 “${normalizedScope}” 不在所选项目根目录中，请重新选择 scope。`);
+      const nextId = localId || registerLocalGitRepository(files);
+      saveLocalGitSettings({ localId: rootDirectory || selectionIsPersistable(files) ? nextId : undefined, path: selectedPath, scope: normalizedScope });
+      const query = new URLSearchParams({ source: 'local', localMode: 'git', localId: nextId, scope: normalizedScope });
+      navigate(`/docs/local/git?${query.toString()}`);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '无法读取所选 Git 仓库。');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  return <section className="setup-card local-git-form-card"><div className="repository-form-heading"><div><span className="eyebrow">OPEN A LOCAL GIT DOC SPACE</span><h2>设置本地 Git 仓库</h2></div><span className="form-hint">项目根目录只选择一次，scope 从文件树中选择</span></div><form onSubmit={openLocalGitRepository}><div className="local-git-setup-grid"><div className="setup-field"><span className="local-git-label">Git 项目根目录</span><LocalFolderPicker label="选择包含 .git 的项目文件夹" onSelect={selectRepository} /><output className="selected-folder-path">{selectedPath || '尚未选择项目根目录'}</output><p className="local-git-selection">{selection.length ? `已选择 ${selection.length} 个只读条目，根目录不会再次选择。` : '选择包含 .git 的项目根目录。'}</p></div><div className="setup-field"><span className="local-git-label">文档目录 scope</span><LocalScopeTree files={selection} value={scope} onChange={(value) => { setScope(value); setError(''); saveLocalGitSettings({ localId: localId || undefined, path: selectedPath, scope: value }); }} /><p className="local-git-selection">当前 scope：{scope || '尚未选择'}</p></div><button className="button button-primary setup-submit" type="submit">打开本地 Git 文档 <span>→</span></button></div>{error && <p className="local-git-error">{error}</p>}<Link className="local-git-cancel" to="/?mode=repository">设置在线 Git 仓库</Link></form></section>;
+  return <section className="setup-card local-git-form-card"><div className="repository-form-heading"><div><span className="eyebrow">OPEN A LOCAL GIT DOC SPACE</span><h2>设置本地 Git 仓库</h2></div><span className="form-hint">项目根目录只选择一次，scope 从文件树中选择</span></div><form onSubmit={openLocalGitRepository}><div className="local-git-setup-grid"><div className="setup-field"><span className="local-git-label">Git 项目根目录</span><LocalFolderPicker label="选择包含 .git 的项目文件夹" onSelect={selectRepository} /><output className="selected-folder-path">{selectedPath || '尚未选择项目根目录'}</output><p className="local-git-selection">{loading ? '正在读取 Git 文件，请稍候…' : rootDirectory || selection.length ? '已读取根目录，打开时再读取其余文件；根目录不会再次选择。' : '选择包含 .git 的项目根目录。'}</p></div><div className="setup-field"><span className="local-git-label">文档目录 scope</span><LocalScopeTree files={selection} directories={rootDirectory ? rootDirectories : undefined} value={scope} onChange={(value) => { setScope(value); setError(''); saveLocalGitSettings({ localId: localId || undefined, path: selectedPath, scope: value }); }} /><p className="local-git-selection">当前 scope：{scope || '尚未选择'}</p></div><button className="button button-primary setup-submit" type="submit" disabled={loading}>{loading ? '正在读取…' : '打开本地 Git 文档'} <span>→</span></button></div>{error && <p className="local-git-error">{error}</p>}<Link className="local-git-cancel" to="/?mode=repository">设置在线 Git 仓库</Link></form></section>;
 }
 
 function HomePage() {
