@@ -30,10 +30,9 @@ Bitbucket Cloud 的文档空间使用 `source=bitbucket`，其中 `<owner>` 对�
 本地测试：在首页或文档页顶栏选择本地文件夹，选择 `tests/fixtures/docs` 目录后，Viewer 会按需只读该文件夹，不上传、不复制整目录，也不会将本地 Markdown 写入 IndexedDB。
 浏览器应弹出文件夹选择器；如果浏览器不支持原生目录选择，则使用目录上传兼容模式。
 
-本地 Git 测试：使用支持 File System Access API 的浏览器选择一个 Git 仓库根目录；如果要限制到
-仓库中的文档夹具，可在本地文档 URL 后追加 `&scope=tests%2Ffixtures%2Fdocs`。发现 `.git/HEAD`
-后，顶栏应出现 VERSION 选择器，并可打开历史和版本比较。目录上传回退模式不保证包含隐藏的
-`.git` 文件，因此只能验证普通本地文件夹模式。
+本地 Git 测试：从首页进入“设置本地 Git 仓库”，先选择 `.git` 所在的仓库项目根目录，再填写
+`tests/fixtures/docs` 作为文档 `scope`。发现 `.git/HEAD` 后，顶栏应出现 VERSION 选择器，并可打开
+历史和版本比较。目录上传回退模式不保证包含隐藏的 `.git` 文件，因此只能验证普通本地文件夹模式。
 
 ## 验收清单
 
@@ -48,6 +47,9 @@ Bitbucket Cloud 的文档空间使用 `source=bitbucket`，其中 `<owner>` 对�
 - [ ] 首页或文档页顶栏的本地文件夹入口能读取选中的 fixtures，而不是访问服务器。
 - [ ] 使用原生目录选择器选择只包含一个 Markdown 文件的目录时，该文件仍能被发现和打开。
 - [ ] 使用原生文件夹选择器后刷新页面，本地文档空间可以恢复；恢复内容仍是只读句柄，不是文件副本。
+- [ ] “本地文档”与“设置本地 Git 仓库”是两个独立入口；本地 Git 设置要求分别选择项目根目录和填写 `scope`。
+- [ ] 本地 Git 设置页面拒绝不包含 `.git/HEAD` 的目录，并明确提示重新选择 Git 项目根目录。
+- [ ] 本地 Git 文档页只显示配置的 `scope`，Sidebar 不显示项目根目录下的其它 Markdown。
 - [ ] Bitbucket URL 使用 `source=bitbucket` 后能读取公开仓库文档空间。
 - [ ] VERSION 选择器能切换 GitHub/Bitbucket 的 branch 或 tag。
 - [ ] 本地文档空间不显示 Git VERSION 选择器或版本徽标。

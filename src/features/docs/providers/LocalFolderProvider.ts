@@ -10,19 +10,23 @@ interface LocalFileRecord {
   handle?: FileSystemFileHandle;
 }
 
+export type LocalFolderMode = 'folder' | 'git';
+
 function normalizePath(path: string): string {
   return path.replaceAll('\\', '/').replace(/^\/+/, '').replace(/\/+/g, '/');
 }
 
 export class LocalFolderProvider implements RepositoryProvider {
   readonly kind = 'local' as const;
+  private readonly mode: LocalFolderMode;
   private readonly files = new Map<string, LocalFileRecord>();
   private readonly objectUrls = new Map<string, string>();
   private ready: Promise<void> = Promise.resolve();
   private gitRepository?: LocalGitRepository;
   private gitDetection?: Promise<LocalGitRepository | undefined>;
 
-  constructor(files: Iterable<LocalFolderSelection>) {
+  constructor(files: Iterable<LocalFolderSelection>, mode: LocalFolderMode = 'folder') {
+    this.mode = mode;
     this.replaceSelections(files);
   }
 
@@ -56,6 +60,7 @@ export class LocalFolderProvider implements RepositoryProvider {
 
   private async getGitRepository(): Promise<LocalGitRepository | undefined> {
     await this.ready;
+    if (this.mode !== 'git') return undefined;
     if (this.gitRepository) return this.gitRepository;
     if (!this.gitDetection) {
       this.gitDetection = (async () => {
@@ -66,7 +71,7 @@ export class LocalFolderProvider implements RepositoryProvider {
             return candidate;
           }
         } catch {
-          // 选择的文件夹不是 Git 仓库时继续使用普通本地文件模式。
+          // Git 专用模式检测失败，交由调用方显示配置错误。
         }
         return undefined;
       })();
@@ -76,6 +81,10 @@ export class LocalFolderProvider implements RepositoryProvider {
 
   setReady(ready: Promise<void>) {
     this.ready = ready;
+  }
+
+  async isGitRepository(): Promise<boolean> {
+    return Boolean(await this.getGitRepository());
   }
 
   async getTree(input: TreeQuery): Promise<RepositoryEntry[]> {
@@ -160,19 +169,27 @@ export class LocalFolderProvider implements RepositoryProvider {
 
 const localProviders = new Map<string, LocalFolderProvider>();
 
-export function registerLocalFolder(files: Iterable<LocalFolderSelection>): string {
+function registerLocalSelection(files: Iterable<LocalFolderSelection>, mode: LocalFolderMode): string {
   const id = `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const selection = [...files];
-  localProviders.set(id, new LocalFolderProvider(selection));
+  localProviders.set(id, new LocalFolderProvider(selection, mode));
   void saveLocalFolderHandles(id, selection);
   return id;
 }
 
-export function getLocalFolder(id: string | null): LocalFolderProvider | undefined {
+export function registerLocalFolder(files: Iterable<LocalFolderSelection>): string {
+  return registerLocalSelection(files, 'folder');
+}
+
+export function registerLocalGitRepository(files: Iterable<LocalFolderSelection>): string {
+  return registerLocalSelection(files, 'git');
+}
+
+export function getLocalFolder(id: string | null, mode: LocalFolderMode = 'folder'): LocalFolderProvider | undefined {
   if (!id) return undefined;
   const existing = localProviders.get(id);
   if (existing) return existing;
-  const restored = new LocalFolderProvider([]);
+  const restored = new LocalFolderProvider([], mode);
   restored.setReady(loadLocalFolderHandles(id).then((selection) => { restored.replaceSelections(selection); }));
   localProviders.set(id, restored);
   return restored;

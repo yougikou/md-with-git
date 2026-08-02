@@ -12,6 +12,7 @@
 - Git 版本历史
 - Markdown 版本差异对比
 - 本地文件夹快捷预览
+- 本地 Git 仓库项目根目录与文档 scope 的独立配置
 
 项目不直接 Fork Docsify，而是借鉴 Docsify 的文档体验，构建独立的 React 模块。
 
@@ -369,19 +370,22 @@ LocalFolderProvider
 
 - Bitbucket Cloud 通过 `source=bitbucket` 选择，`owner` 对应 workspace，`repository` 对应 repo slug。
 - 首页提供 GitHub/Bitbucket、仓库、文档目录和可选版本的配置表单；文档页顶栏可随时切换到该表单。
-- 本地文件夹通过首页或文档页顶栏的目录选择入口载入，文件只在浏览器内读取，不上传到服务器；支持的浏览器
+- 普通本地文档通过首页或文档页顶栏的“本地文档”入口载入，文件只在浏览器内读取，不上传到服务器；支持的浏览器
   优先使用 File System Access API，不支持时回退到 `webkitdirectory`，拖拽入口留作增强。
+- 本地 Git 仓库使用独立的“设置本地 Git 仓库”入口：用户先选择 `.git` 所在的项目根目录，再填写相对项目根目录的
+  文档 `scope`。Viewer 只将该 scope 作为文档空间，项目根目录的其它 Markdown 不进入 Sidebar 或默认路由。
+- 本地 Git 配置会校验项目根目录中的 `.git/HEAD`；普通本地文档不会因为目录中碰巧存在 `.git` 而切换成 Git 配置流程。
 - 本地模式只保存用户授权目录中的文件句柄，按需读取当前 Markdown 或资源文件；本地来源不写入
   IndexedDB Markdown 缓存。
 - 原生目录选择模式会在 IndexedDB 中保存文件句柄和相对路径，以便刷新页面后恢复只读会话；不保存
   本地文件内容。旧浏览器的文件选择回退模式无法持久化句柄，失效后需要重新选择目录。
-- 普通本地文件夹模式不显示 Git VERSION；若未选择仓库根目录或当前浏览器无法读取隐藏的
-  `.git` 文件，则继续作为无版本的只读文件夹运行。
-- 选择 Git 仓库根目录且原生 File System Access API 能读取 `.git` 时，`LocalFolderProvider`
+- 普通本地文件夹模式显式关闭 Git 解析并不显示 Git VERSION；即使用户选择的普通文件夹碰巧包含 `.git`，也不会切换成 Git 模式。
+- 只有本地 Git 专用配置会启用 Git 解析；若该模式无法读取隐藏的 `.git` 文件，则直接提示重新选择 Git 项目根目录。
+- 通过本地 Git 专用入口选择仓库根目录且原生 File System Access API 能读取 `.git` 时，`LocalFolderProvider`
   会使用浏览器端 Git 解析器读取 HEAD、Branch、Tag、Commit 历史和版本内容，并复用 History
   与 Diff 接口；只读取对象，不修改或上传本地仓库。目录上传回退模式通常不会提供隐藏的 `.git`
   文件，因此会继续作为普通本地文件夹运行。
-- `scope` 仍然是文档空间根目录，Provider 的文件树和渲染路由不会越过该边界。
+- `scope` 仍然是文档空间根目录，Provider 的文件树和渲染路由不会越过该边界；本地 Git 路由缺少 scope 时直接提示配置错误。
 
 进入条件：Phase 1 的 GitHub 公共仓库手动验收通过，并完成 `tests/` 中的测试夹具检查。
 
@@ -560,8 +564,9 @@ GitHub/Bitbucket 原生网站；“与当前版本比较”以当前查看版本
 `from` 和 `to`，本地文件夹会明确提示不包含 Git 历史。
 
 本地 Git 仓库 Provider 实现位于 `src/features/docs/providers/LocalGitRepository.ts`，由
-`LocalFolderProvider` 自动检测 `.git/HEAD` 后启用。它支持只读 refs、版本文件读取、文件历史和
-基础 unified diff；普通文件夹仍保持无版本历史的行为。
+`LocalFolderProvider` 在本地 Git 专用配置完成后检测 `.git/HEAD` 并启用。它支持只读 refs、版本文件读取、文件历史和
+基础 unified diff；普通文件夹仍保持无版本历史的行为。首页的本地 Git 设置表单位于 `src/main.tsx`，通过
+`localMode=git` 和 `scope` 明确区分本地 Git 文档空间与普通本地文档空间。
 
 测试清单与预期结果见 `tests/README.md`。每完成一部分功能，应先更新本节状态与测试结果，
 再继续下一个 Phase。

@@ -40,6 +40,16 @@ button { font: inherit; }
 .repository-form-grid input, .repository-form-grid select { width: 100%; min-width: 0; padding: 10px 11px; border: 1px solid #dfe4ea; border-radius: 6px; color: #374151; background: #fff; font: 13px 'DM Sans', sans-serif; outline: none; }
 .repository-form-grid input:focus, .repository-form-grid select:focus { border-color: #ee8a72; box-shadow: 0 0 0 3px #ee8a721c; }
 .repository-submit { white-space: nowrap; }
+.local-git-form-card { max-width: 1020px; margin-top: 54px; padding: 22px; border: 1px solid #e4e7ec; border-radius: 14px; background: #ffffffaa; box-shadow: 0 12px 35px #18202b0b; }
+.local-git-form-grid { display: grid; grid-template-columns: 1.5fr 1.5fr auto; gap: 14px; align-items: end; }
+.local-git-form-grid > div, .local-git-form-grid > label { display: grid; gap: 7px; color: #8a94a2; font: 10px 'DM Mono', monospace; }
+.local-git-form-grid input { width: 100%; min-width: 0; padding: 10px 11px; border: 1px solid #dfe4ea; border-radius: 6px; color: #374151; background: #fff; font: 13px 'DM Sans', sans-serif; outline: none; }
+.local-git-form-grid input:focus { border-color: #ee8a72; box-shadow: 0 0 0 3px #ee8a721c; }
+.local-git-label { color: #8a94a2; font: 10px 'DM Mono', monospace; }
+.local-git-form-grid .local-folder-picker { justify-self: start; padding: 10px 12px; font-size: 12px; }
+.local-git-selection { min-height: 17px; margin: 0; color: #99a1ad; font: 11px/1.5 'DM Sans', sans-serif; }
+.local-git-error { margin: 16px 0 0; color: #b34c32; font-size: 12px; }
+.local-git-cancel { display: inline-block; margin-top: 16px; color: #e55436; font-size: 12px; }
 .app-loading, .empty-page { display: grid; min-height: 100vh; place-content: center; justify-items: center; gap: 15px; color: #687384; }
 .app-loading p { font-size: 13px; }
 .empty-page h1 { margin: 0; color: #18202b; font-family: 'Noto Serif SC', serif; }
@@ -163,6 +173,8 @@ button { font: inherit; }
   .form-hint { display: block; margin-top: 10px; }
   .repository-form-grid { grid-template-columns: 1fr 1fr; }
   .repository-form-grid label:nth-child(4), .repository-form-grid label:nth-child(5), .repository-submit { grid-column: 1 / -1; }
+  .local-git-form-grid { grid-template-columns: 1fr; }
+  .local-git-form-grid > button { justify-self: start; }
   .docs-topbar { height: 58px; padding: 0 16px; gap: 10px; }
   .mobile-menu { display: block; color: #697485; font-size: 20px; }
   .topbar-divider, .github-link, .topbar-ref, .topbar-scope, .source-badge, .ref-picker, .repo-switcher { display: none; }

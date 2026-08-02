@@ -28,7 +28,7 @@ async function readDirectory(handle: FileSystemDirectoryHandle, prefix = ''): Pr
   return files;
 }
 
-export function LocalFolderPicker({ onSelect, compact = false }: { onSelect: (files: LocalFolderSelection[]) => void; compact?: boolean }) {
+export function LocalFolderPicker({ onSelect, compact = false, label, compactLabel }: { onSelect: (files: LocalFolderSelection[]) => void; compact?: boolean; label?: string; compactLabel?: string }) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -51,5 +51,6 @@ export function LocalFolderPicker({ onSelect, compact = false }: { onSelect: (fi
     inputRef.current?.click();
   };
 
-  return <><button type="button" className={`local-folder-picker ${compact ? 'compact' : ''}`} onClick={chooseFolder}>{compact ? '本地文档' : '选择本地 Markdown 文件夹'}</button><input ref={inputRef} className="local-folder-input" type="file" multiple {...{ webkitdirectory: true, directory: true }} onChange={handleChange} /></>;
+  const buttonLabel = compact ? compactLabel || '本地文档' : label || '选择本地 Markdown 文件夹';
+  return <><button type="button" className={`local-folder-picker ${compact ? 'compact' : ''}`} onClick={chooseFolder}>{buttonLabel}</button><input ref={inputRef} className="local-folder-input" type="file" multiple {...{ webkitdirectory: true, directory: true }} onChange={handleChange} /></>;
 }
