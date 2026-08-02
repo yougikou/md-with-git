@@ -1,11 +1,11 @@
 import { StrictMode, lazy, Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
-import { DocsRendererProvider, createDefaultDocsRendererRegistry } from '@md-with-git/viewer';
+import { DocsRendererProvider, createDocsRendererRegistry } from '@md-with-git/viewer';
 import { ChangeHistoryRenderer } from './docs-renderers';
 
 const DocsViewer = lazy(() => import('@md-with-git/viewer/DocsPage'));
-const rendererRegistry = createDefaultDocsRendererRegistry();
+const rendererRegistry = createDocsRendererRegistry();
 rendererRegistry.registerYamlRenderer('change-history', ChangeHistoryRenderer);
 
 function App() {

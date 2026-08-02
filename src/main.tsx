@@ -3,7 +3,8 @@ import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Link, Route, Routes, useNavigate } from 'react-router-dom';
 import { LocalFolderPicker, type LocalFolderSelection } from './features/docs/LocalFolderPicker';
 import { registerLocalFolder } from './features/docs/providers';
-import { DocsRendererProvider, createDefaultDocsRendererRegistry } from './features/docs/renderers';
+import { DocsRendererProvider, createDocsRendererRegistry } from './features/docs/renderers';
+import { ChangeHistoryRenderer } from '../examples/standalone-host/src/docs-renderers';
 import './styles.css';
 
 const DocsPage = lazy(() => import('./features/docs/DocsPage'));
@@ -79,7 +80,7 @@ function NotFound() {
 }
 
 function App() {
-  const rendererRegistry = createDefaultDocsRendererRegistry();
+  const rendererRegistry = createDocsRendererRegistry({ 'change-history': ChangeHistoryRenderer });
   return (
     <DocsRendererProvider registry={rendererRegistry}>
       <BrowserRouter>

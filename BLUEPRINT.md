@@ -94,7 +94,7 @@ import { createDocsRendererRegistry, DocsViewer } from '@md-with-git/viewer';
 import { ChangeHistoryRenderer } from './docs-renderers';
 
 const rendererRegistry = createDocsRendererRegistry({
-  yaml: { 'change-history': ChangeHistoryRenderer },
+  'change-history': ChangeHistoryRenderer,
 });
 
 export function App() {
@@ -102,8 +102,9 @@ export function App() {
 }
 ```
 
-如果用户不需要自定义渲染器，Viewer 使用包内置 registry；如果需要自定义能力，只修改宿主的
-`src/docs-renderers.tsx`，不修改 Git 文档仓库。
+Viewer 核心只提供空的 registry 和 YAML 扩展协议；需要自定义能力时，只修改宿主的
+`src/docs-renderers.tsx` 并显式注册，不修改 Git 文档仓库。当前示例中的 `change-history`
+完全属于宿主示例，不属于 Viewer 内置能力。
 
 ## 4. 数据源 Provider
 
@@ -401,8 +402,6 @@ Phase 3 不把 YAML 仅当作普通代码展示，而是提供一个由简易宿
 ```text
 宿主传入的 rendererRegistry
   ↓
-包内置 rendererRegistry
-  ↓
 未知 renderer → 原始 YAML 代码块
 ```
 
@@ -460,8 +459,9 @@ YAML fenced code block
 未知 renderer 降级为原始 YAML 代码块并显示诊断信息
 ```
 
-第一批内置/测试类型为 `change-history`，用于以 YAML 记录变更履历并渲染为时间线或变更卡片。
-后续可扩展 API 状态表、发布说明、配置矩阵等数据视图。渲染器的注册、注销、类型校验、错误
+第一批示例/测试类型为 `change-history`，实现位于 `examples/standalone-host/src/docs-renderers.tsx`，
+用于以 YAML 记录变更履历并渲染为表格；它不是 Viewer 内置渲染器。后续可扩展 API 状态表、发布
+说明、配置矩阵等数据视图。渲染器的注册、注销、类型校验、错误
 边界和远程仓库安全策略需要在实现阶段一并确定。实现必须禁止 `eval`、远程 JS 动态导入和
 从 Markdown/YAML 推导组件模块路径。
 
@@ -541,10 +541,10 @@ Phase 3 YAML 渲染器第一批   已实现，待使用 fixtures 浏览器手动
 Phase 2 的来源与版本测试入口见 `tests/README.md`，包括 GitHub、Bitbucket、本地文件夹、相对
 资源和 Branch/Tag 切换。
 
-Phase 3 第一批实现位置：`src/features/docs/renderers/` 提供 registry、宿主上下文和内置
-`change-history` 渲染器；`src/features/docs/DocsPage.tsx` 只在 YAML fenced block 明确提供
-`renderer=<name>` 时解析数据。`examples/standalone-host/` 展示用户通过安装包宿主注入渲染器的
-配置路径。未知 renderer 和 YAML 解析错误均保留原始代码并显示诊断，不从 Git 文档加载代码。
+Phase 3 第一批实现位置：`src/features/docs/renderers/` 只提供 registry、宿主上下文和 YAML
+解析协议；`examples/standalone-host/src/docs-renderers.tsx` 提供 `change-history` 示例渲染器。
+`src/features/docs/DocsPage.tsx` 只在 YAML fenced block 明确提供 `renderer=<name>` 时解析数据。
+未知 renderer 和 YAML 解析错误均保留原始代码并显示诊断，不从 Git 文档加载代码。
 
 测试清单与预期结果见 `tests/README.md`。每完成一部分功能，应先更新本节状态与测试结果，
 再继续下一个 Phase。

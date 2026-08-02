@@ -9,10 +9,10 @@ pnpm add @md-with-git/viewer react react-dom react-router-dom
 配置入口是 `src/docs-renderers.tsx`。只有宿主显式注册的组件才会被 Viewer 使用，文档中的 `renderer=change-history` 只是一个名称，不会触发动态导入、`eval` 或远程 JavaScript 加载。
 
 ```tsx
-import { DocsRendererProvider, createDefaultDocsRendererRegistry } from '@md-with-git/viewer';
+import { DocsRendererProvider, createDocsRendererRegistry } from '@md-with-git/viewer';
 import { ChangeHistoryRenderer } from './docs-renderers';
 
-const rendererRegistry = createDefaultDocsRendererRegistry();
+const rendererRegistry = createDocsRendererRegistry();
 rendererRegistry.registerYamlRenderer('change-history', ChangeHistoryRenderer);
 
 export function App() {
