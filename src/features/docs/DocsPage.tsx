@@ -9,6 +9,9 @@ import { LocalFolderPicker, type LocalFolderSelection } from './LocalFolderPicke
 import { BitbucketProvider, getLocalFolder, GitHubProvider, registerLocalFolder } from './providers';
 import type { DocumentNode, RepositoryEntry, RepositoryProvider, RepositoryRef, TreeNode } from './types';
 import type { ImgHTMLAttributes } from 'react';
+import { parse as parseYaml } from 'yaml';
+import { useDocsRendererRegistry } from './renderers';
+import type { DocsRendererRegistry, YamlBlockContext } from './renderers';
 
 const githubProvider = new GitHubProvider();
 const bitbucketProvider = new BitbucketProvider();
@@ -62,6 +65,30 @@ function sourceFromQuery(value: string | null): SourceKind {
   return value === 'bitbucket' || value === 'local' ? value : 'github';
 }
 
+function readCodeMeta(node: unknown): string {
+  if (!node || typeof node !== 'object') return '';
+  const candidate = node as { data?: { meta?: unknown }; meta?: unknown };
+  if (typeof candidate.data?.meta === 'string') return candidate.data.meta;
+  return typeof candidate.meta === 'string' ? candidate.meta : '';
+}
+
+function rendererNameFromMeta(meta: string): string | undefined {
+  return meta.match(/(?:^|\s)renderer=([^\s]+)/)?.[1];
+}
+
+function YamlRendererBlock({ name, source, registry, context }: { name: string; source: string; registry: DocsRendererRegistry; context: YamlBlockContext }) {
+  let value: unknown;
+  try {
+    value = parseYaml(source, { schema: 'core' });
+  } catch (reason: unknown) {
+    const message = reason instanceof Error ? reason.message : 'YAML 解析失败。';
+    return <div className="yaml-renderer-fallback"><p className="yaml-renderer-diagnostic">无法解析 renderer={name}：{message}</p><code>{source}</code></div>;
+  }
+  const Renderer = registry.getYamlRenderer(name);
+  if (!Renderer) return <div className="yaml-renderer-fallback"><p className="yaml-renderer-diagnostic">未注册 YAML 渲染器 “{name}”，已降级为原始数据。</p><code>{source}</code></div>;
+  return <div className="yaml-rendered-block"><Renderer value={value} context={context} /></div>;
+}
+
 export default function DocsPage() {
   const { '*': wildcard = '' } = useParams();
   const location = useLocation();
@@ -75,6 +102,7 @@ export default function DocsPage() {
   const [contentLoading, setContentLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const rendererRegistry = useDocsRendererRegistry();
 
   const segments = wildcard.split('/').filter(Boolean);
   const owner = segments[0] || '';
@@ -148,7 +176,7 @@ export default function DocsPage() {
   if (!selectedDocument) return <div className="docs-shell"><Topbar owner={owner} repository={repository} ref={ref} defaultRef={defaultRef} scope={scope} source={sourceKind} refs={refs} onRefChange={changeRef} onOpenLocal={openLocalFolder} onMenu={() => setSidebarOpen(true)} /><ErrorState message="找不到请求的 Markdown 文档，请从左侧目录选择一个页面。" /></div>;
 
   const parsed = source ? parseFrontmatter(source.content) : null;
-  return <div className="docs-shell"><Topbar owner={owner} repository={repository} ref={ref} defaultRef={defaultRef} scope={scope} source={sourceKind} refs={refs} onRefChange={changeRef} onOpenLocal={openLocalFolder} onMenu={() => setSidebarOpen(true)} /><div className={`docs-layout ${sidebarOpen ? 'sidebar-visible' : ''}`}><div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} /><Sidebar tree={tree} activePath={activePath} onNavigate={openDocument} /><main className="docs-main"><div className="document-wrap">{contentLoading || !parsed ? <div className="document-skeleton"><div /><div /><div /><div /></div> : <><div className="document-meta"><span>{selectedDocument.path}</span>{activeRef && <span className="ref-badge">{activeRef.slice(0, 12)}</span>}</div><article className="markdown-body"><h1>{parsed.title}</h1><ReactMarkdown remarkPlugins={[remarkGfm]} components={{ h1: () => null, a: ({ href, children, ...props }) => <a href={href} {...props} target={href?.startsWith('http') ? '_blank' : undefined} rel={href?.startsWith('http') ? 'noreferrer' : undefined}>{children}</a>, img: ({ src, alt, ...props }) => provider ? <MarkdownImage src={src} alt={alt} provider={provider} owner={owner} repository={repository} documentPath={selectedDocument.path} assetRef={activeRef} {...props} /> : null, code: ({ className, children, ...props }) => { const language = className?.replace('language-', ''); return <code className={`${className || ''} code-inline`} data-language={language} {...props}>{children}</code>; } }}>{parsed.content}</ReactMarkdown></article><div className="document-footer"><span>Powered by Git MD Viewer</span><span className="footer-note">{sourceKind === 'local' ? 'Local folder · read-only' : `${sourceKind} · ${scope}`}</span></div></>}</div></main></div></div>;
+  return <div className="docs-shell"><Topbar owner={owner} repository={repository} ref={ref} defaultRef={defaultRef} scope={scope} source={sourceKind} refs={refs} onRefChange={changeRef} onOpenLocal={openLocalFolder} onMenu={() => setSidebarOpen(true)} /><div className={`docs-layout ${sidebarOpen ? 'sidebar-visible' : ''}`}><div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} /><Sidebar tree={tree} activePath={activePath} onNavigate={openDocument} /><main className="docs-main"><div className="document-wrap">{contentLoading || !parsed ? <div className="document-skeleton"><div /><div /><div /><div /></div> : <><div className="document-meta"><span>{selectedDocument.path}</span>{activeRef && <span className="ref-badge">{activeRef.slice(0, 12)}</span>}</div><article className="markdown-body"><h1>{parsed.title}</h1><ReactMarkdown remarkPlugins={[remarkGfm]} components={{ h1: () => null, a: ({ href, children, ...props }) => <a href={href} {...props} target={href?.startsWith('http') ? '_blank' : undefined} rel={href?.startsWith('http') ? 'noreferrer' : undefined}>{children}</a>, img: ({ src, alt, ...props }) => provider ? <MarkdownImage src={src} alt={alt} provider={provider} owner={owner} repository={repository} documentPath={selectedDocument.path} assetRef={activeRef} {...props} /> : null, code: ({ className, children, node, ...props }) => { const language = className?.replace('language-', ''); const rendererName = language === 'yaml' ? rendererNameFromMeta(readCodeMeta(node)) : undefined; if (rendererName) return <YamlRendererBlock name={rendererName} source={String(children).trim()} registry={rendererRegistry} context={{ documentPath: selectedDocument.path, repository, ref: activeRef, scope }} />; return <code className={`${className || ''} code-inline`} data-language={language} {...props}>{children}</code>; } }}>{parsed.content}</ReactMarkdown></article><div className="document-footer"><span>Powered by Git MD Viewer</span><span className="footer-note">{sourceKind === 'local' ? 'Local folder · read-only' : `${sourceKind} · ${scope}`}</span></div></>}</div></main></div></div>;
 }
 
 function Topbar({ owner, repository, ref, defaultRef, scope, source, refs, onRefChange, onOpenLocal, onMenu }: { owner: string; repository: string; ref?: string; defaultRef?: string; scope?: string; source: SourceKind; refs: RepositoryRef[]; onRefChange: (value: string) => void; onOpenLocal: (files: LocalFolderSelection[]) => void; onMenu: () => void }) {

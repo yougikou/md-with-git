@@ -95,6 +95,21 @@ button { font: inherit; }
 .markdown-body pre code { color: #e7edf6; font: 13px/1.75 'DM Mono', monospace; }
 .code-inline { padding: 2px 5px; border-radius: 4px; color: #d65338; background: #fff0eb; font: 13px 'DM Mono', monospace; }
 .markdown-body pre .code-inline { padding: 0; color: #e7edf6; background: transparent; }
+.markdown-body pre:has(.yaml-rendered-block), .markdown-body pre:has(.yaml-renderer-fallback) { overflow: visible; padding: 0; background: transparent; box-shadow: none; }
+.yaml-rendered-block { color: #374151; }
+.yaml-renderer-fallback { overflow: auto; padding: 16px 18px; border: 1px solid #f0c8bc; border-radius: 9px; background: #fff8f5; }
+.yaml-renderer-fallback code { display: block; color: #7b4538; font: 12px/1.7 'DM Mono', monospace; white-space: pre-wrap; }
+.yaml-renderer-diagnostic { margin: 0 0 12px; color: #b34c32; font: 12px/1.6 'DM Mono', monospace; }
+.change-history { margin: 25px 0; padding: 20px; border: 1px solid #e5e8ed; border-radius: 10px; background: #fff; }
+.change-history-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; color: #9aa3af; font: 11px 'DM Mono', monospace; }
+.change-history table { margin: 0; font-size: 13px; }
+.change-history th { font-size: 11px; font-weight: 500; }
+.change-history-version { min-width: 90px; color: #e55436; font-family: 'DM Mono', monospace; white-space: nowrap; }
+.change-history td ul { margin: 6px 0 0; padding-left: 18px; color: #697485; }
+.change-history-breaking { display: block; width: fit-content; margin-top: 5px; padding: 2px 4px; border-radius: 3px; color: #a33a27; background: #ffe8e1; font: 9px 'DM Mono', monospace; }
+.change-history details { margin-top: 14px; border-top: 1px solid #edf0f4; }
+.change-history summary { padding-top: 14px; color: #e55436; cursor: pointer; font-size: 13px; }
+.change-history details table { margin-top: 14px; }
 .document-footer { display: flex; margin-top: 75px; padding-top: 16px; border-top: 1px solid #edf0f4; justify-content: space-between; color: #a0a8b4; font-size: 11px; }
 .document-footer a { color: #e45b3e; }
 .state-card { display: grid; min-height: calc(100vh - 64px); place-content: center; justify-items: center; gap: 10px; padding: 30px; text-align: center; }

@@ -381,12 +381,12 @@ LocalFolderProvider
 
 ### Phase 3：源码与组件
 
-- 外部代码块
+- [ ] 外部代码块
 - 行号和高亮
 - 文件 Tab
-- YAML 代码块渲染器注册接口
-- 用户自定义 YAML 数据类型与 React 渲染组件
-- 独立使用模式的简易宿主与 `src/docs-renderers.tsx` 配置示例
+- [x] YAML 代码块渲染器注册接口
+- [x] 用户自定义 YAML 数据类型与 React 渲染组件
+- [x] 独立使用模式的简易宿主与 `src/docs-renderers.tsx` 配置示例
 - React Island
 - iframe Demo
 
@@ -525,6 +525,7 @@ Phase 1 核心 Viewer       已实现
 生产构建                   已通过：vite build
 GitHub 真实仓库验收        待使用公开仓库路径手动确认
 Phase 2 多数据源           已实现，待 Bitbucket/本地公开手动验收
+Phase 3 YAML 渲染器第一批   已实现，待使用 fixtures 浏览器手动验收
 ```
 
 仓库内的 `tests/` 是可直接推送到 GitHub 的手动测试夹具，不依赖后端或私有数据。推送后，
@@ -539,6 +540,11 @@ Phase 2 多数据源           已实现，待 Bitbucket/本地公开手动验�
 
 Phase 2 的来源与版本测试入口见 `tests/README.md`，包括 GitHub、Bitbucket、本地文件夹、相对
 资源和 Branch/Tag 切换。
+
+Phase 3 第一批实现位置：`src/features/docs/renderers/` 提供 registry、宿主上下文和内置
+`change-history` 渲染器；`src/features/docs/DocsPage.tsx` 只在 YAML fenced block 明确提供
+`renderer=<name>` 时解析数据。`examples/standalone-host/` 展示用户通过安装包宿主注入渲染器的
+配置路径。未知 renderer 和 YAML 解析错误均保留原始代码并显示诊断，不从 Git 文档加载代码。
 
 测试清单与预期结果见 `tests/README.md`。每完成一部分功能，应先更新本节状态与测试结果，
 再继续下一个 Phase。

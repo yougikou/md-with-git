@@ -17,6 +17,8 @@
 /docs/<owner>/<repository>/tests/fixtures/docs/guide/install.md?scope=tests%2Ffixtures%2Fdocs
 /docs/<owner>/<repository>/tests/fixtures/docs/guide/advanced/plugins.md?scope=tests%2Ffixtures%2Fdocs
 /docs/<owner>/<repository>/tests/fixtures/docs/api/button.md?scope=tests%2Ffixtures%2Fdocs
+/docs/<owner>/<repository>/tests/fixtures/docs/examples/change-history.md?scope=tests%2Ffixtures%2Fdocs
+/docs/<owner>/<repository>/tests/fixtures/docs/examples/change-history.md?scope=tests%2Ffixtures%2Fdocs
 ```
 
 Bitbucket Cloud 的文档空间使用 `source=bitbucket`，其中 `<owner>` 对应 workspace：
@@ -45,9 +47,23 @@ Bitbucket Cloud 的文档空间使用 `source=bitbucket`，其中 `<owner>` 对�
 - [ ] 本地文档空间不显示 Git VERSION 选择器或版本徽标。
 - [ ] 首页 Git 文档空间表单能填写 GitHub/Bitbucket、仓库和 `scope` 并打开文档。
 - [ ] 从本地文档页点击“打开 Git 仓库”后可以切换到 Git 文档空间。
+- [ ] `examples/change-history.md` 的 `yaml renderer=change-history` 显示为变更履历表格，默认显示最近 3 个版本。
+- [ ] 变更履历中第 4 个及更早版本默认收起，点击“查看更早的变更”后可展开。
+- [ ] `renderer=not-installed` 保留原始 YAML，并显示“未注册 YAML 渲染器”诊断。
+- [ ] YAML 解析失败时保留原始代码并显示解析错误，不执行文档中的 JavaScript。
+- [ ] `examples/change-history.md` 的 `yaml renderer=change-history` 显示为变更履历表格，默认显示最近 3 个版本。
+- [ ] 变更履历中第 4 个及更早版本默认收起，点击“查看更早的变更”后可展开。
+- [ ] `renderer=not-installed` 保留原始 YAML，并显示“未注册 YAML 渲染器”诊断。
+- [ ] YAML 解析失败时保留原始代码并显示解析错误，不执行文档中的 JavaScript。
 
 Phase 2 的代码级验证已通过：`tsc -b` 与 `vite build`。上面的 Provider 访问项需要在浏览器中
 使用公开仓库或本地文件夹完成验收后再勾选。
+
+Phase 3 第一批的代码级验证已通过：`tsc -b` 与 `vite build`。YAML 渲染器和独立宿主入口还需要
+按上面的测试夹具完成浏览器手动验收。
+
+Phase 3 第一批的代码级验证已通过：`tsc -b` 与 `vite build`。YAML 渲染器和独立宿主入口还需要
+按上面的测试夹具完成浏览器手动验收。
 - [ ] 移动端宽度下可通过菜单打开和关闭 Sidebar。
 - [ ] 添加 `?ref=<branch-or-commit>` 后，页面仍能从指定 Git 版本读取。
 

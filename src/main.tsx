@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Link, Route, Routes, useNavigate } from 'react-router-dom';
 import { LocalFolderPicker, type LocalFolderSelection } from './features/docs/LocalFolderPicker';
 import { registerLocalFolder } from './features/docs/providers';
+import { DocsRendererProvider, createDefaultDocsRendererRegistry } from './features/docs/renderers';
 import './styles.css';
 
 const DocsPage = lazy(() => import('./features/docs/DocsPage'));
@@ -78,16 +79,19 @@ function NotFound() {
 }
 
 function App() {
+  const rendererRegistry = createDefaultDocsRendererRegistry();
   return (
-    <BrowserRouter>
-      <Suspense fallback={<Loading />}>
-        <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/docs/*" element={<DocsPage />} />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </Suspense>
-    </BrowserRouter>
+    <DocsRendererProvider registry={rendererRegistry}>
+      <BrowserRouter>
+        <Suspense fallback={<Loading />}>
+          <Routes>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/docs/*" element={<DocsPage />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </Suspense>
+      </BrowserRouter>
+    </DocsRendererProvider>
   );
 }
 
