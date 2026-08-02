@@ -51,9 +51,10 @@ Bitbucket Cloud 的文档空间使用 `source=bitbucket`，其中 `<owner>` 对�
 - [ ] 变更履历中第 4 个及更早版本默认收起，点击“查看更早的变更”后可展开。
 - [ ] `renderer=not-installed` 保留原始 YAML，并显示“未注册 YAML 渲染器”诊断。
 - [ ] YAML 解析失败时保留原始代码并显示解析错误，不执行文档中的 JavaScript。
-- [ ] GitHub/Bitbucket 文档页显示 `History` 和 `Diff` 入口。
-- [ ] `.../guide/install.md/history?scope=tests%2Ffixtures%2Fdocs` 能显示文件 Commit 历史；每条历史包含作者、日期、短 SHA 和提交链接（Provider 返回时）。
-- [ ] 历史列表中的“与上一个版本比较”能打开 Diff 页面，并显示 from/to SHA 与 unified patch。
+- [ ] GitHub/Bitbucket 文档页显示 `History` 入口，正文不显示 `Diff` 按钮。
+- [ ] `.../guide/install.md/history?scope=tests%2Ffixtures%2Fdocs` 能显示文件 Commit 历史；每条历史包含作者、日期和短 SHA。
+- [ ] 历史列表中的“查看该历史版本”会切换到该 Commit 的文档内容，不跳转到 GitHub/Bitbucket 原生网站。
+- [ ] 历史列表中的“与当前版本比较”会以当前查看版本为目标打开 Diff 页面，并显示 from/to SHA 与 unified patch。
 - [ ] 直接打开 Diff 但缺少 `from` 或 `to` 时显示明确的参数提示，不发起无效请求。
 - [ ] 本地文件夹打开 History 时显示本地模式不包含 Git 历史的提示。
 

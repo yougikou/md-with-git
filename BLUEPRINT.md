@@ -548,8 +548,9 @@ Phase 3 第一批实现位置：`src/features/docs/renderers/` 只提供 registr
 
 Phase 4 第一批实现位置：`src/features/docs/HistoryView.tsx` 展示当前 Markdown 文件的 Commit
 历史，`src/features/docs/DiffView.tsx` 展示 GitHub/Bitbucket Provider 返回的 unified patch。
-文档页的 History / Diff 操作会保留当前仓库、文档目录和版本上下文；历史项可以生成相邻 Commit
-比较链接。Diff 页面要求显式提供 `from` 和 `to`，本地文件夹会明确提示不包含 Git 历史。
+文档页只提供 History 入口；历史列表中的“查看该历史版本”会切换当前文档的 `ref`，不跳转到
+GitHub/Bitbucket 原生网站；“与当前版本比较”以当前查看版本为比较目标。Diff 页面要求显式提供
+`from` 和 `to`，本地文件夹会明确提示不包含 Git 历史。
 
 测试清单与预期结果见 `tests/README.md`。每完成一部分功能，应先更新本节状态与测试结果，
 再继续下一个 Phase。
