@@ -83,7 +83,9 @@ export class LocalGitRepository {
   }
 
   private async resolve(ref = 'HEAD'): Promise<string> {
-    return git.resolveRef({ ...this.options(), ref });
+    const oid = await git.resolveRef({ ...this.options(), ref });
+    if (typeof oid !== 'string' || !oid) throw new Error(`无法解析本地 Git 引用：${ref}`);
+    return oid;
   }
 
   async getRefs(): Promise<RepositoryRef[]> {
@@ -101,7 +103,8 @@ export class LocalGitRepository {
   }
 
   async listFiles(ref?: string): Promise<string[]> {
-    return git.listFiles({ ...this.options(), ref: ref || 'HEAD' });
+    const oid = await this.resolve(ref || 'HEAD');
+    return git.listFiles({ ...this.options(), ref: oid });
   }
 
   async readFile(path: string, ref?: string): Promise<Uint8Array> {
