@@ -94,7 +94,7 @@ export default function DocsPage() {
 
   useEffect(() => {
     if (!owner || !repository) { setLoading(false); setError('请使用 /docs/:owner/:repository 打开一个文档空间。'); return; }
-    if (!provider) { setLoading(false); setError('本地文件夹会话已失效，请返回首页重新选择文件夹。'); return; }
+    if (!provider) { setLoading(false); setError('当前本地文件夹访问会话已结束，请使用顶栏“本地文档”重新选择文件夹。'); return; }
     if (sourceKind !== 'local' && !scope) { setLoading(false); setError('请指定要渲染的文档目录，例如 ?scope=docs 或 ?scope=docs/guide。'); return; }
     let cancelled = false;
     setLoading(true); setError(null); setSource(null);
