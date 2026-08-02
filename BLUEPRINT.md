@@ -348,8 +348,71 @@ LocalFolderProvider
 - 外部代码块
 - 行号和高亮
 - 文件 Tab
+- YAML 代码块渲染器注册接口
+- 用户自定义 YAML 数据类型与 React 渲染组件
 - React Island
 - iframe Demo
+
+#### Phase 3 的 YAML 代码块扩展协议
+
+Phase 3 不把 YAML 仅当作普通代码展示，而是提供一个由宿主应用或显式插件注册的渲染器接口。
+远程 Markdown 只能声明数据类型和数据内容，不能通过 YAML 执行任意 JavaScript；渲染组件必须
+由产品宿主预先注册。
+
+Markdown 约定：
+
+````md
+```yaml renderer=change-history
+entries:
+  - version: 1.4.0
+    date: 2026-08-02
+    summary: 支持本地文档空间
+    breaking: false
+```
+````
+
+建议接口：
+
+```tsx
+interface YamlBlockContext {
+  documentPath: string;
+  repository: string;
+  ref?: string;
+  scope: string;
+}
+
+interface YamlBlockRendererProps {
+  value: unknown;
+  context: YamlBlockContext;
+}
+
+interface DocsRendererRegistry {
+  registerYamlRenderer(
+    name: string,
+    renderer: React.ComponentType<YamlBlockRendererProps>,
+  ): () => void;
+}
+```
+
+处理流程：
+
+```text
+YAML fenced code block
+  ↓
+读取 renderer 标识
+  ↓
+安全解析 YAML（不执行脚本）
+  ↓
+从宿主 DocsRendererRegistry 查找渲染器
+  ↓
+渲染用户定义的 React 组件
+  ↓
+未知 renderer 降级为原始 YAML 代码块并显示诊断信息
+```
+
+第一批内置/测试类型为 `change-history`，用于以 YAML 记录变更履历并渲染为时间线或变更卡片。
+后续可扩展 API 状态表、发布说明、配置矩阵等数据视图。渲染器的注册、注销、类型校验、错误
+边界和远程仓库安全策略需要在实现阶段一并确定。
 
 ### Phase 4：版本功能
 
