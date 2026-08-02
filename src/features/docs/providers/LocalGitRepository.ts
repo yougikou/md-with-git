@@ -63,7 +63,7 @@ export class LocalGitRepository {
       return [...names];
     };
     const readOnly = async () => { throw new Error('本地 Git Provider 是只读的。'); };
-    this.fs = { promises: { readFile, readdir, stat, lstat: stat, writeFile: readOnly, unlink: readOnly, mkdir: readOnly, rmdir: readOnly } };
+    this.fs = { promises: { readFile, readdir, stat, lstat: stat, readlink: readOnly, writeFile: readOnly, unlink: readOnly, mkdir: readOnly, rmdir: readOnly, symlink: readOnly } };
   }
 
   private relativePath(path: string): string {
