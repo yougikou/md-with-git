@@ -26,6 +26,7 @@ Bitbucket Cloud 的文档空间使用 `source=bitbucket`，其中 `<owner>` 对�
 ```
 
 本地测试：在首页选择本地文件夹，选择 `tests/fixtures/docs` 目录后，Viewer 会在不上传文件的情况下读取该文件夹。
+浏览器应弹出文件夹选择器；如果浏览器不支持原生目录选择，则使用目录上传兼容模式。
 
 ## 验收清单
 

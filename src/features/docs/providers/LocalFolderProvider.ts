@@ -1,6 +1,7 @@
 import type {
   AssetQuery, Commit, CompareQuery, DiffResult, FileQuery, HistoryQuery, RepositoryEntry, RepositoryProvider, RepositoryRef, TreeQuery,
 } from '../types';
+import type { LocalFolderFile, LocalFolderSelection } from '../LocalFolderPicker';
 
 function normalizePath(path: string): string {
   return path.replaceAll('\\', '/').replace(/^\/+/, '').replace(/\/+/g, '/');
@@ -11,14 +12,14 @@ export class LocalFolderProvider implements RepositoryProvider {
   private readonly files = new Map<string, File>();
   private readonly objectUrls = new Map<string, string>();
 
-  constructor(files: Iterable<File>) {
-    const selectedFiles = [...files];
-    const rawPaths = selectedFiles.map((file) => normalizePath(file.webkitRelativePath || file.name));
+  constructor(files: Iterable<LocalFolderSelection>) {
+    const selectedFiles = [...files].map((item) => 'file' in item ? item : { file: item, path: item.webkitRelativePath || item.name });
+    const rawPaths = selectedFiles.map((item) => normalizePath(item.path));
     const firstParts = rawPaths.map((path) => path.split('/')[0]);
     const commonRoot = firstParts.length > 0 && firstParts.every((part) => part === firstParts[0]) ? `${firstParts[0]}/` : '';
-    selectedFiles.forEach((file, index) => {
+    selectedFiles.forEach((item, index) => {
       const path = commonRoot ? rawPaths[index].slice(commonRoot.length) : rawPaths[index];
-      this.files.set(path, file);
+      this.files.set(path, item.file);
     });
   }
 
@@ -61,7 +62,7 @@ export class LocalFolderProvider implements RepositoryProvider {
 
 const localProviders = new Map<string, LocalFolderProvider>();
 
-export function registerLocalFolder(files: Iterable<File>): string {
+export function registerLocalFolder(files: Iterable<LocalFolderSelection>): string {
   const id = `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   localProviders.set(id, new LocalFolderProvider(files));
   return id;

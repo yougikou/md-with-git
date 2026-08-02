@@ -5,7 +5,7 @@ import remarkGfm from 'remark-gfm';
 import { buildDocumentTree, findDocument, findFirstDocument } from './tree';
 import { parseFrontmatter, resolveAssetPath } from './markdown';
 import { documentCacheKey, readMarkdownCache, writeMarkdownCache } from './cache';
-import { LocalFolderPicker } from './LocalFolderPicker';
+import { LocalFolderPicker, type LocalFolderSelection } from './LocalFolderPicker';
 import { BitbucketProvider, getLocalFolder, GitHubProvider, registerLocalFolder } from './providers';
 import type { DocumentNode, RepositoryEntry, RepositoryProvider, RepositoryRef, TreeNode } from './types';
 
@@ -110,7 +110,7 @@ export default function DocsPage() {
     navigate(`${location.pathname}?${query.toString()}`);
   }, [location.pathname, navigate, searchParams]);
 
-  const openLocalFolder = useCallback((files: File[]) => {
+  const openLocalFolder = useCallback((files: LocalFolderSelection[]) => {
     const localId = registerLocalFolder(files);
     navigate(`/docs/local/folder?source=local&localId=${encodeURIComponent(localId)}`);
   }, [navigate]);
@@ -141,7 +141,7 @@ export default function DocsPage() {
   return <div className="docs-shell"><Topbar owner={owner} repository={repository} ref={ref} defaultRef={defaultRef} scope={scope} source={sourceKind} refs={refs} onRefChange={changeRef} onOpenLocal={openLocalFolder} onMenu={() => setSidebarOpen(true)} /><div className={`docs-layout ${sidebarOpen ? 'sidebar-visible' : ''}`}><div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} /><Sidebar tree={tree} activePath={activePath} onNavigate={openDocument} /><main className="docs-main"><div className="document-wrap">{contentLoading || !parsed ? <div className="document-skeleton"><div /><div /><div /><div /></div> : <><div className="document-meta"><span>{selectedDocument.path}</span>{activeRef && <span className="ref-badge">{activeRef.slice(0, 12)}</span>}</div><article className="markdown-body"><h1>{parsed.title}</h1><ReactMarkdown remarkPlugins={[remarkGfm]} components={{ h1: () => null, a: ({ href, children, ...props }) => <a href={href} {...props} target={href?.startsWith('http') ? '_blank' : undefined} rel={href?.startsWith('http') ? 'noreferrer' : undefined}>{children}</a>, img: ({ src, alt, ...props }) => <img src={renderImage(src) || src} alt={alt || ''} {...props} />, code: ({ className, children, ...props }) => { const language = className?.replace('language-', ''); return <code className={`${className || ''} code-inline`} data-language={language} {...props}>{children}</code>; } }}>{parsed.content}</ReactMarkdown></article><div className="document-footer"><span>Powered by Git MD Viewer</span><span className="footer-note">{sourceKind === 'local' ? 'Local folder' : `${sourceKind} · ${scope}`}</span></div></>}</div></main></div></div>;
 }
 
-function Topbar({ owner, repository, ref, defaultRef, scope, source, refs, onRefChange, onOpenLocal, onMenu }: { owner: string; repository: string; ref?: string; defaultRef?: string; scope?: string; source: SourceKind; refs: RepositoryRef[]; onRefChange: (value: string) => void; onOpenLocal: (files: File[]) => void; onMenu: () => void }) {
+function Topbar({ owner, repository, ref, defaultRef, scope, source, refs, onRefChange, onOpenLocal, onMenu }: { owner: string; repository: string; ref?: string; defaultRef?: string; scope?: string; source: SourceKind; refs: RepositoryRef[]; onRefChange: (value: string) => void; onOpenLocal: (files: LocalFolderSelection[]) => void; onMenu: () => void }) {
   const sourceLabel = source === 'bitbucket' ? 'Bitbucket' : source === 'local' ? 'Local' : 'GitHub';
   return <header className="docs-topbar"><button className="mobile-menu" onClick={onMenu} aria-label="打开目录">☰</button><Link to="/" className="topbar-brand"><span className="brand-mark">MD</span><span>Git MD Viewer</span></Link><span className="topbar-divider">/</span><span className="source-badge">{sourceLabel}</span><span className="repo-name">{owner && repository ? `${owner}/${repository}` : 'Local folder'}</span><span className="topbar-spacer" /><RefPicker refs={refs} value={ref} defaultRef={defaultRef} onChange={onRefChange} />{scope && <span className="topbar-scope">scope: {scope}</span>}<LocalFolderPicker onSelect={onOpenLocal} compact /><a className="github-link" href={source === 'github' && owner && repository ? `https://github.com/${owner}/${repository}` : source === 'bitbucket' && owner && repository ? `https://bitbucket.org/${owner}/${repository}` : '#'} target={source === 'local' ? undefined : '_blank'} rel={source === 'local' ? undefined : 'noreferrer'}>View source ↗</a></header>;
 }

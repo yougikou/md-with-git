@@ -1,7 +1,7 @@
 import { StrictMode, Suspense, lazy } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Link, Route, Routes, useNavigate } from 'react-router-dom';
-import { LocalFolderPicker } from './features/docs/LocalFolderPicker';
+import { LocalFolderPicker, type LocalFolderSelection } from './features/docs/LocalFolderPicker';
 import { registerLocalFolder } from './features/docs/providers';
 import './styles.css';
 
@@ -18,8 +18,8 @@ function Loading() {
 
 function HomePage() {
   const navigate = useNavigate();
-  const openLocalFolder = (files: File[]) => {
-    const localId = registerLocalFolder(Array.from(files));
+  const openLocalFolder = (files: LocalFolderSelection[]) => {
+    const localId = registerLocalFolder(files);
     navigate(`/docs/local/folder?source=local&localId=${encodeURIComponent(localId)}`);
   };
 
