@@ -52,5 +52,5 @@ export function LocalFolderPicker({ onSelect, compact = false, label, compactLab
   };
 
   const buttonLabel = compact ? compactLabel || '本地文档' : label || '选择本地 Markdown 文件夹';
-  return <><button type="button" className={`local-folder-picker ${compact ? 'compact' : ''}`} onClick={chooseFolder}>{buttonLabel}</button><input ref={inputRef} className="local-folder-input" type="file" multiple {...{ webkitdirectory: true, directory: true }} onChange={handleChange} /></>;
+  return <><button type="button" className={`local-folder-picker ${compact ? 'compact' : ''}`} onClick={chooseFolder}>{buttonLabel}</button><input ref={inputRef} className="local-folder-input" type="file" multiple {...{ webkitdirectory: '', directory: '' }} onChange={handleChange} /></>;
 }
