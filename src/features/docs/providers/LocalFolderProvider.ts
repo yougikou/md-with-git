@@ -2,6 +2,7 @@ import type {
   AssetQuery, Commit, CompareQuery, DiffResult, FileQuery, HistoryQuery, RepositoryEntry, RepositoryProvider, RepositoryRef, TreeQuery,
 } from '../types';
 import type { LocalFolderSelection } from '../LocalFolderPicker';
+import { loadLocalFolderHandles, saveLocalFolderHandles } from '../localPersistence';
 
 interface LocalFileRecord {
   file?: File;
@@ -16,8 +17,14 @@ export class LocalFolderProvider implements RepositoryProvider {
   readonly kind = 'local' as const;
   private readonly files = new Map<string, LocalFileRecord>();
   private readonly objectUrls = new Map<string, string>();
+  private ready: Promise<void> = Promise.resolve();
 
   constructor(files: Iterable<LocalFolderSelection>) {
+    this.replaceSelections(files);
+  }
+
+  replaceSelections(files: Iterable<LocalFolderSelection>) {
+    this.files.clear();
     const selectedFiles = [...files].map((item) => {
       if ('handle' in item) return { handle: item.handle, path: item.path };
       if ('file' in item) return { file: item.file, path: item.path };
@@ -32,7 +39,12 @@ export class LocalFolderProvider implements RepositoryProvider {
     });
   }
 
+  setReady(ready: Promise<void>) {
+    this.ready = ready;
+  }
+
   async getTree(input: TreeQuery): Promise<RepositoryEntry[]> {
+    await this.ready;
     const root = normalizePath(input.rootPath || '');
     return [...this.files.entries()]
       .filter(([path]) => !root || path === root || path.startsWith(`${root}/`))
@@ -44,6 +56,7 @@ export class LocalFolderProvider implements RepositoryProvider {
   }
 
   async getFile(input: FileQuery): Promise<string> {
+    await this.ready;
     const file = this.files.get(normalizePath(input.path));
     if (!file) throw new Error(`本地文件不存在：${input.path}`);
     const fileObject = file.file || (file.handle ? await file.handle.getFile() : undefined);
@@ -52,6 +65,7 @@ export class LocalFolderProvider implements RepositoryProvider {
   }
 
   async getAssetUrl(input: AssetQuery): Promise<string> {
+    await this.ready;
     const path = normalizePath(input.path);
     const file = this.files.get(path);
     if (!file) return '';
@@ -82,10 +96,18 @@ const localProviders = new Map<string, LocalFolderProvider>();
 
 export function registerLocalFolder(files: Iterable<LocalFolderSelection>): string {
   const id = `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  localProviders.set(id, new LocalFolderProvider(files));
+  const selection = [...files];
+  localProviders.set(id, new LocalFolderProvider(selection));
+  void saveLocalFolderHandles(id, selection);
   return id;
 }
 
 export function getLocalFolder(id: string | null): LocalFolderProvider | undefined {
-  return id ? localProviders.get(id) : undefined;
+  if (!id) return undefined;
+  const existing = localProviders.get(id);
+  if (existing) return existing;
+  const restored = new LocalFolderProvider([]);
+  restored.setReady(loadLocalFolderHandles(id).then((selection) => { restored.replaceSelections(selection); }));
+  localProviders.set(id, restored);
+  return restored;
 }
