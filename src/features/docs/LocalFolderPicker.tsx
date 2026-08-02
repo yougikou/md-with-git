@@ -28,12 +28,16 @@ async function readDirectory(handle: FileSystemDirectoryHandle, prefix = ''): Pr
   return files;
 }
 
-export function LocalFolderPicker({ onSelect, compact = false, label, compactLabel }: { onSelect: (files: LocalFolderSelection[]) => void; compact?: boolean; label?: string; compactLabel?: string }) {
+export function LocalFolderPicker({ onSelect, compact = false, label, compactLabel }: { onSelect: (files: LocalFolderSelection[], selectedPath?: string) => void; compact?: boolean; label?: string; compactLabel?: string }) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
-    if (files?.length) onSelect(Array.from(files));
+    if (files?.length) {
+      const selected = Array.from(files);
+      const selectedPath = selected[0]?.webkitRelativePath?.split('/')[0] || '';
+      onSelect(selected, selectedPath);
+    }
     event.target.value = '';
   };
 
@@ -42,7 +46,7 @@ export function LocalFolderPicker({ onSelect, compact = false, label, compactLab
     if (picker) {
       try {
         const handle = await picker();
-        onSelect(await readDirectory(handle));
+        onSelect(await readDirectory(handle), handle.name);
       } catch {
         // 用户取消文件夹选择时保持当前文档不变。
       }

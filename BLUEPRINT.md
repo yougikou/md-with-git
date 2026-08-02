@@ -571,6 +571,10 @@ GitHub/Bitbucket 原生网站；“与当前版本比较”以当前查看版本
 浏览器运行时会在加载 Git 解析器前显式提供 `Buffer` 兼容层，避免 Vite 环境将已存在的 loose/pack 对象误判为缺失。
 `tests/local-git-browser-server.mjs` 与 `tests/run-local-git-browser-harness.mjs` 提供只读的 Chromium 回归流程；
 它会验证 refs、HEAD 文档树和 scope 内 Markdown，不复制、不上传或缓存目标仓库内容。
+三类设置入口统一为设置卡片：本地 Markdown 选择后先显示已授权目录名；本地 Git 只选择一次项目根目录，
+并从同一批文件生成树状 scope；在线 Git、普通本地文件夹和本地 Git 的设置项都通过
+`src/features/docs/setupPersistence.ts` 保存在浏览器 localStorage 中。原生目录句柄仍只保存在 IndexedDB，
+不保存文件内容；浏览器不会暴露本地绝对路径，因此界面显示目录名或浏览器提供的相对路径。
 
 测试清单与预期结果见 `tests/README.md`。每完成一部分功能，应先更新本节状态与测试结果，
 再继续下一个 Phase。

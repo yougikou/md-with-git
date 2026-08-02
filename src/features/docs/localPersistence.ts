@@ -31,9 +31,9 @@ export async function loadLocalFolderHandles(id: string): Promise<LocalFolderHan
   return new Promise((resolve, reject) => {
     const request = database.transaction(storeName, 'readonly').objectStore(storeName).get(id);
     request.onsuccess = () => {
-      if (!Array.isArray(request.result) || !request.result.length) reject(new Error('本地文件夹会话已过期，请重新选择文件夹。'));
+      if (!Array.isArray(request.result) || !request.result.length) reject(new Error('无法恢复本地文件夹权限，请从设置页重新授权已保存的目录。'));
       else resolve(request.result as LocalFolderHandle[]);
     };
-    request.onerror = () => reject(new Error('无法恢复本地文件夹会话，请重新选择文件夹。'));
+    request.onerror = () => reject(new Error('无法恢复本地文件夹权限，请从设置页重新授权已保存的目录。'));
   });
 }

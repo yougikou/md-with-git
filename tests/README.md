@@ -57,6 +57,14 @@ Bitbucket Cloud 的文档空间使用 `source=bitbucket`，其中 `<owner>` 对�
 - [ ] VERSION 选择器能切换 GitHub/Bitbucket 的 branch 或 tag。
 - [ ] 本地文档空间不显示 Git VERSION 选择器或版本徽标。
 - [ ] 首页 Git 文档空间表单能填写 GitHub/Bitbucket、仓库和 `scope` 并打开文档。
+- [ ] 本地 Markdown、 本地 Git、在线 Git 三个设置入口都显示统一设置卡片；本地 Markdown 选择后显示已授权目录名，再点击“打开本地文档”。
+- [ ] 在线 Git 表单填写后刷新设置页，来源、Owner/Workspace、Repository、文档目录和版本信息仍保留。
+- [ ] 本地 Git 只选择一次项目根目录；选择完成后从同一批文件生成树状 scope 目录，`.git` 不出现在文档目录树中。
+- [ ] 本地 Git 已选择的目录、scope 在返回设置页或刷新后仍保留；原生目录句柄失效时保留路径并允许重新授权。
+- [ ] 本地 Markdown、 本地 Git、在线 Git 三个设置入口都显示统一设置卡片；本地 Markdown 选择后显示已授权目录名，再点击“打开本地文档”。
+- [ ] 在线 Git 表单填写后刷新设置页，来源、Owner/Workspace、Repository、文档目录和版本信息仍保留。
+- [ ] 本地 Git 只选择一次项目根目录；选择完成后从同一批文件生成树状 scope 目录，`.git` 不出现在文档目录树中。
+- [ ] 本地 Git 已选择的目录、scope 在返回设置页或刷新后仍保留；原生目录句柄失效时保留路径并允许重新授权。
 - [ ] 从本地文档页点击“打开 Git 仓库”后可以切换到 Git 文档空间。
 - [ ] `examples/change-history.md` 的 `yaml renderer=change-history` 显示为变更履历表格，默认显示最近 3 个版本。
 - [ ] 变更履历中第 4 个及更早版本默认收起，点击“查看更早的变更”后可展开。
