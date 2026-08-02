@@ -69,6 +69,42 @@ Viewer 的一次打开操作对应一个“文档空间”，即一个 Git 仓�
 Git 仓库只提供文档文件、相对资源和版本数据；Sidebar、默认首页和文档路由都限制在 `scope`
 目录内。未指定 `scope` 时，Viewer 应提示调用方补全文档目录。
 
+### 3.1 包分发与简易宿主
+
+Viewer 以 npm 包形式分发。即使用户不在已有产品中集成，也通过一个最小宿主应用提供入口、
+Provider 配置和渲染器注册；文档仓库本身不提供可执行组件。
+
+项目内的独立使用示例规划为：
+
+```text
+examples/standalone-host/
+├── README.md
+└── src/
+    ├── main.tsx
+    └── docs-renderers.tsx
+```
+
+示例宿主负责安装并加载 `@md-with-git/viewer`、提供 `DocsRuntime` 和文档来源配置、从
+`src/docs-renderers.tsx` 注入用户自己的 YAML 渲染器，以及提供产品级路由、主题和错误边界。
+
+推荐配置形态：
+
+```tsx
+import { createDocsRendererRegistry, DocsViewer } from '@md-with-git/viewer';
+import { ChangeHistoryRenderer } from './docs-renderers';
+
+const rendererRegistry = createDocsRendererRegistry({
+  yaml: { 'change-history': ChangeHistoryRenderer },
+});
+
+export function App() {
+  return <DocsViewer rendererRegistry={rendererRegistry} />;
+}
+```
+
+如果用户不需要自定义渲染器，Viewer 使用包内置 registry；如果需要自定义能力，只修改宿主的
+`src/docs-renderers.tsx`，不修改 Git 文档仓库。
+
 ## 4. 数据源 Provider
 
 统一抽象 GitHub、Bitbucket 和本地文件：
@@ -350,14 +386,25 @@ LocalFolderProvider
 - 文件 Tab
 - YAML 代码块渲染器注册接口
 - 用户自定义 YAML 数据类型与 React 渲染组件
+- 独立使用模式的简易宿主与 `src/docs-renderers.tsx` 配置示例
 - React Island
 - iframe Demo
 
 #### Phase 3 的 YAML 代码块扩展协议
 
-Phase 3 不把 YAML 仅当作普通代码展示，而是提供一个由宿主应用或显式插件注册的渲染器接口。
+Phase 3 不把 YAML 仅当作普通代码展示，而是提供一个由简易宿主或产品宿主注册的渲染器接口。
 远程 Markdown 只能声明数据类型和数据内容，不能通过 YAML 执行任意 JavaScript；渲染组件必须
-由产品宿主预先注册。
+来自已安装的 Viewer 包、宿主应用或宿主配置路径，不能来自远程 Git 文档。
+
+渲染器来源按优先级处理：
+
+```text
+宿主传入的 rendererRegistry
+  ↓
+包内置 rendererRegistry
+  ↓
+未知 renderer → 原始 YAML 代码块
+```
 
 Markdown 约定：
 
@@ -394,6 +441,9 @@ interface DocsRendererRegistry {
 }
 ```
 
+独立使用时，`examples/standalone-host/src/docs-renderers.tsx` 是用户定义渲染器的配置路径；
+发布为 npm 包时，该文件属于使用方项目，不会被 Git 文档内容动态加载。
+
 处理流程：
 
 ```text
@@ -412,7 +462,8 @@ YAML fenced code block
 
 第一批内置/测试类型为 `change-history`，用于以 YAML 记录变更履历并渲染为时间线或变更卡片。
 后续可扩展 API 状态表、发布说明、配置矩阵等数据视图。渲染器的注册、注销、类型校验、错误
-边界和远程仓库安全策略需要在实现阶段一并确定。
+边界和远程仓库安全策略需要在实现阶段一并确定。实现必须禁止 `eval`、远程 JS 动态导入和
+从 Markdown/YAML 推导组件模块路径。
 
 ### Phase 4：版本功能
 
@@ -455,6 +506,7 @@ diff / react-diff-viewer
 宿主应用负责部署和产品路由
 Docs Viewer 负责文档体验
 Provider 负责 Git 数据源
+用户渲染器来自安装包宿主或显式配置路径，不来自文档仓库
 前端负责目录发现和内容加载
 Commit SHA 负责版本确定性
 Markdown Renderer 与数据源解耦
