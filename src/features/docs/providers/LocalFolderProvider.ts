@@ -37,7 +37,9 @@ export class LocalFolderProvider implements RepositoryProvider {
     });
     const rawPaths = selectedFiles.map((item) => normalizePath(item.path));
     const firstParts = rawPaths.map((path) => path.split('/')[0]);
-    const commonRoot = firstParts.length > 0 && firstParts.every((part) => part === firstParts[0]) ? `${firstParts[0]}/` : '';
+    const usesNativeHandles = selectedFiles.some((item) => Boolean(item.handle));
+    const hasBrowserRelativePaths = selectedFiles.some((item) => Boolean(item.file?.webkitRelativePath));
+    const commonRoot = !usesNativeHandles && hasBrowserRelativePaths && firstParts.length > 0 && firstParts.every((part) => part === firstParts[0]) ? `${firstParts[0]}/` : '';
     selectedFiles.forEach((item, index) => {
       const path = commonRoot ? rawPaths[index].slice(commonRoot.length) : rawPaths[index];
       this.files.set(path, { file: item.file, handle: item.handle });
