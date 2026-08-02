@@ -1,6 +1,7 @@
-import { ChangeEvent, StrictMode, Suspense, lazy } from 'react';
+import { StrictMode, Suspense, lazy } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Link, Route, Routes, useNavigate } from 'react-router-dom';
+import { LocalFolderPicker } from './features/docs/LocalFolderPicker';
 import { registerLocalFolder } from './features/docs/providers';
 import './styles.css';
 
@@ -17,9 +18,7 @@ function Loading() {
 
 function HomePage() {
   const navigate = useNavigate();
-  const openLocalFolder = (event: ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files;
-    if (!files?.length) return;
+  const openLocalFolder = (files: File[]) => {
     const localId = registerLocalFolder(Array.from(files));
     navigate(`/docs/local/folder?source=local&localId=${encodeURIComponent(localId)}`);
   };
@@ -37,8 +36,9 @@ function HomePage() {
         <p className="hero-copy">指定一个 Git 仓库中的文档空间，自动发现目录、跟随仓库版本，并在一个干净的阅读界面里浏览 Markdown。</p>
         <div className="hero-actions">
           <Link className="button button-primary" to="/docs/vitejs/vite/docs/guide?scope=docs%2Fguide">打开示例文档 <span>↗</span></Link>
-          <label className="button button-quiet local-folder-button">选择本地文件夹 <input type="file" multiple {...{ webkitdirectory: '', directory: '' }} onChange={openLocalFolder} /></label>
+          <LocalFolderPicker onSelect={openLocalFolder} />
         </div>
+        <div className="local-mode-note"><span className="eyebrow">LOCAL MODE</span><span>直接在浏览器中读取本机 Markdown 文件夹，不上传文件。</span></div>
         <div className="feature-strip">
           <div><strong>01</strong><span>文档空间</span></div>
           <div><strong>02</strong><span>GFM Markdown</span></div>

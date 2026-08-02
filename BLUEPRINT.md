@@ -329,7 +329,7 @@ LocalFolderProvider
 实现说明：
 
 - Bitbucket Cloud 通过 `source=bitbucket` 选择，`owner` 对应 workspace，`repository` 对应 repo slug。
-- 本地文件夹通过首页的目录选择入口载入，文件只在浏览器内读取，不上传到服务器；当前优先使用
+- 本地文件夹通过首页或文档页顶栏的目录选择入口载入，文件只在浏览器内读取，不上传到服务器；当前优先使用
   `webkitdirectory` 兼容入口，File System Access API 和拖拽入口留作增强。
 - `scope` 仍然是文档空间根目录，Provider 的文件树和渲染路由不会越过该边界。
 
