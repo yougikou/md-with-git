@@ -96,7 +96,7 @@ function LocalFolderSetup() {
 
   const openFolder = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!localId && !selection.length && !rootDirectory) { setError('请先选择本地 Markdown 文件夹。'); return; }
+    if (!localId && !selection.length && !rootDirectory) { setError('请先选择本地文档文件夹。'); return; }
     setLoading(true); setError('');
     try {
       const files = rootDirectory ? await collectDirectoryFiles(rootDirectory) : selection;
@@ -110,7 +110,7 @@ function LocalFolderSetup() {
     }
   };
 
-  return <section className="setup-card local-folder-form-card"><div className="repository-form-heading"><div><span className="eyebrow">OPEN LOCAL MARKDOWN</span><h2>选择本地 Markdown 文件夹</h2></div><span className="form-hint">浏览器只读取你明确选择的文件</span></div><form onSubmit={openFolder}><div className="local-folder-setup-grid"><div className="setup-field"><span className="local-git-label">文档文件夹</span><LocalFolderPicker label="选择本地 Markdown 文件夹" onSelect={selectFolder} /><output className="selected-folder-path">{selectedPath || '尚未选择文件夹'}</output><p className="local-git-selection">{loading ? '正在读取文件夹内容，请稍候…' : rootDirectory || selection.length ? '已读取根目录，打开时再读取其余文件。' : '选择后会显示文件夹名称，并可继续打开文档。'} 浏览器不会暴露绝对本地路径。</p></div><button className="button button-primary setup-submit" type="submit" disabled={loading}>{loading ? '正在读取…' : '打开本地文档'} <span>→</span></button></div>{error && <p className="local-git-error">{error}</p>}</form></section>;
+  return <section className="setup-card local-folder-form-card"><div className="repository-form-heading"><div><span className="eyebrow">OPEN LOCAL MARKDOWN</span><h2>选择本地文档文件夹</h2></div><span className="form-hint">浏览器只读取你明确选择的文件</span></div><form onSubmit={openFolder}><div className="local-folder-setup-grid"><div className="setup-field"><span className="local-git-label">文档文件夹</span><div className="local-folder-actions"><LocalFolderPicker label="选择本地文档文件夹" onSelect={selectFolder} /><button className="button button-primary setup-submit" type="submit" disabled={loading}>{loading ? '正在读取…' : '打开本地文档'} <span>→</span></button></div><output className="selected-folder-path">{selectedPath || '尚未选择文件夹'}</output><p className="local-git-selection">{loading ? '正在读取文件夹内容，请稍候…' : rootDirectory || selection.length ? '已读取根目录，打开时再读取其余文件。' : '选择后会显示文件夹路径，并可继续打开文档。'}</p></div></div>{error && <p className="local-git-error">{error}</p>}</form></section>;
 }
 
 function LocalGitRepositorySetup() {
@@ -174,7 +174,7 @@ function LocalGitRepositorySetup() {
     }
   };
 
-  return <section className="setup-card local-git-form-card"><div className="repository-form-heading"><div><span className="eyebrow">OPEN A LOCAL GIT DOC SPACE</span><h2>设置本地 Git 仓库</h2></div><span className="form-hint">项目根目录只选择一次，scope 从文件树中选择</span></div><form onSubmit={openLocalGitRepository}><div className="local-git-setup-grid"><div className="setup-field"><span className="local-git-label">Git 项目根目录</span><LocalFolderPicker label="选择包含 .git 的项目文件夹" onSelect={selectRepository} /><output className="selected-folder-path">{selectedPath || '尚未选择项目根目录'}</output><p className="local-git-selection">{loading ? '正在读取 Git 文件，请稍候…' : rootDirectory || selection.length ? '已读取根目录，打开时再读取其余文件；根目录不会再次选择。' : '选择包含 .git 的项目根目录。'}</p></div><div className="setup-field"><span className="local-git-label">文档目录 scope</span><LocalScopeTree files={selection} directories={rootDirectory ? rootDirectories : undefined} value={scope} onChange={(value) => { setScope(value); setError(''); saveLocalGitSettings({ localId: localId || undefined, path: selectedPath, scope: value }); }} /><p className="local-git-selection">当前 scope：{scope || '尚未选择'}</p></div><button className="button button-primary setup-submit" type="submit" disabled={loading}>{loading ? '正在读取…' : '打开本地 Git 文档'} <span>→</span></button></div>{error && <p className="local-git-error">{error}</p>}<Link className="local-git-cancel" to="/?mode=repository">设置在线 Git 仓库</Link></form></section>;
+  return <section className="setup-card local-git-form-card"><div className="repository-form-heading"><div><span className="eyebrow">OPEN A LOCAL GIT DOC SPACE</span><h2>设置本地 Git 仓库</h2></div><span className="form-hint">项目根目录只选择一次，scope 从文件树中单选</span></div><form onSubmit={openLocalGitRepository}><div className="local-git-setup-grid"><div className="setup-field"><span className="local-git-label">Git 项目根目录</span><div className="local-git-actions"><LocalFolderPicker label="选择包含 .git 的项目文件夹" onSelect={selectRepository} /><button className="button button-primary setup-submit" type="submit" disabled={loading}>{loading ? '正在读取…' : '打开本地 Git 文档'} <span>→</span></button></div><output className="selected-folder-path">{selectedPath || '尚未选择项目根目录'}</output><p className="local-git-selection">{loading ? '正在读取 Git 文件，请稍候…' : rootDirectory || selection.length ? '已读取根目录，打开时再读取其余文件；根目录不会再次选择。' : '选择包含 .git 的项目根目录。'}</p></div><div className="setup-field"><span className="local-git-label">文档目录（仅限单选）</span><LocalScopeTree files={selection} directories={rootDirectory ? rootDirectories : undefined} value={scope} onChange={(value) => { setScope(value); setError(''); saveLocalGitSettings({ localId: localId || undefined, path: selectedPath, scope: value }); }} /><p className="local-git-selection">选中文档目录：{scope || '尚未选择'}</p></div></div>{error && <p className="local-git-error">{error}</p>}<Link className="local-git-cancel" to="/?mode=repository">设置在线 Git 仓库</Link></form></section>;
 }
 
 function HomePage() {
@@ -196,16 +196,11 @@ function HomePage() {
         <p className="hero-copy">指定一个 Git 仓库中的文档空间，自动发现目录、跟随仓库版本，并在一个干净的阅读界面里浏览 Markdown。</p>
         <div className="hero-actions">
           <Link className="button button-primary" to="/docs/vitejs/vite/docs/guide?scope=docs%2Fguide">打开示例文档 <span>↗</span></Link>
-          <Link className="button button-quiet" to="/?mode=local-folder">选择本地 Markdown 文件夹 <span>↗</span></Link>
+          <Link className="button button-quiet" to="/?mode=local-folder">选择本地文档文件夹 <span>↗</span></Link>
           <Link className="button button-quiet" to="/?mode=local-git">设置本地 Git 仓库 <span>↗</span></Link>
           <Link className="button button-quiet" to="/?mode=repository">设置在线 Git 仓库 <span>↗</span></Link>
         </div>
         <div className="local-mode-note"><span className="eyebrow">LOCAL MODE</span><span>普通本地文档、本地 Git 文档和在线 Git 文档都先完成设置，再打开文档空间。</span></div>
-        <div className="feature-strip">
-          <div><strong>01</strong><span>文档空间</span></div>
-          <div><strong>02</strong><span>GFM Markdown</span></div>
-          <div><strong>03</strong><span>Commit 版本</span></div>
-        </div>
         {isLocalFolderSetup ? <LocalFolderSetup /> : isLocalGitSetup ? <LocalGitRepositorySetup /> : <RepositoryForm />}
       </section>
     </main>

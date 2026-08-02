@@ -14,6 +14,7 @@ export function buildVersionUrl(documentHref: string, sha: string): string {
   const [path, query = ''] = documentHref.split('?');
   const params = new URLSearchParams(query);
   params.set('ref', sha);
+  params.set('historyVersion', '1');
   return `${path}?${params.toString()}`;
 }
 

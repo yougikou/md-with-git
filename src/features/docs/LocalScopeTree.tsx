@@ -66,7 +66,8 @@ function nativeNodes(directories: LocalDirectoryHandle[]): ScopeNode[] {
 }
 
 function ScopeBranch({ node, value, onChange, onToggle }: { node: ScopeNode; value: string; onChange: (path: string) => void; onToggle: (node: ScopeNode) => void }) {
-  return <li><button type="button" className={`scope-tree-option ${value === node.path ? 'selected' : ''}`} onClick={() => { onChange(node.path); onToggle(node); }} disabled={node.loading} aria-busy={node.loading}><span className="scope-tree-toggle">{node.loading ? '…' : node.expanded ? '⌄' : '›'}</span><span className="scope-tree-folder">□</span>{node.name}{node.loading && <span className="scope-tree-loading">正在读取…</span>}</button>{node.expanded && node.children.length > 0 && <ul>{node.children.map((child) => <ScopeBranch key={child.path} node={child} value={value} onChange={onChange} onToggle={onToggle} />)}</ul>}</li>;
+  const selected = value === node.path;
+  return <li><button type="button" className={`scope-tree-option ${selected ? 'selected' : ''}`} onClick={() => { onChange(node.path); onToggle(node); }} disabled={node.loading} aria-busy={node.loading} aria-pressed={selected} title={`选择 ${node.path}（仅限单选）`}><span className="scope-tree-toggle">{node.loading ? '…' : node.expanded ? '⌄' : '›'}</span><span className="scope-tree-name">{node.name}</span>{node.loading && <span className="scope-tree-loading">正在读取…</span>}</button>{node.expanded && node.children.length > 0 && <ul>{node.children.map((child) => <ScopeBranch key={child.path} node={child} value={value} onChange={onChange} onToggle={onToggle} />)}</ul>}</li>;
 }
 
 export function LocalScopeTree({ files, directories, value, onChange }: { files: LocalFolderSelection[]; directories?: LocalDirectoryHandle[]; value: string; onChange: (path: string) => void }) {
@@ -93,5 +94,5 @@ export function LocalScopeTree({ files, directories, value, onChange }: { files:
     }
   };
 
-  return <div className="scope-tree" aria-label="选择文档目录"><button type="button" className={`scope-tree-option scope-tree-root ${value === '' ? 'selected' : ''}`} onClick={() => onChange('')}><span className="scope-tree-toggle">·</span><span className="scope-tree-folder">□</span>项目根目录</button>{nodes.length > 0 ? <ul>{nodes.map((node) => <ScopeBranch key={node.path} node={node} value={value} onChange={onChange} onToggle={toggleNode} />)}</ul> : <p className="scope-tree-empty">选择项目根目录后，这里会显示可选目录。</p>}</div>;
+  return <div className="scope-tree" aria-label="选择一个文档目录（仅限单选）"><p className="scope-tree-instruction">请选择一个文档目录（仅限单选）</p>{nodes.length > 0 ? <ul>{nodes.map((node) => <ScopeBranch key={node.path} node={node} value={value} onChange={onChange} onToggle={toggleNode} />)}</ul> : <p className="scope-tree-empty">选择项目根目录后，这里会显示可选目录。</p>}</div>;
 }

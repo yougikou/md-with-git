@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { buildDocumentTree, findDocument, findFirstDocument } from './tree';
@@ -45,15 +45,6 @@ function LoadingState({ source }: { source: SourceKind }) {
   return <div className="state-card loading-state"><div className="spinner" /><h2>正在发现文档</h2><p>正在从 {label} 获取文档空间…</p></div>;
 }
 
-function RefPicker({ refs, value, defaultRef, onChange }: { refs: RepositoryRef[]; value?: string; defaultRef?: string; onChange: (value: string) => void }) {
-  if (!refs.length) return null;
-  const branchRefs = refs.filter((ref) => ref.type === 'branch');
-  const tagRefs = refs.filter((ref) => ref.type === 'tag');
-  const selectedValue = typeof value === 'string' ? value : typeof defaultRef === 'string' ? defaultRef : '';
-  const selectedInRefs = refs.some((ref) => ref.name === selectedValue);
-  return <label className="ref-picker"><span>VERSION</span><select value={selectedValue} onChange={(event) => onChange(event.target.value)} aria-label="选择文档版本">{selectedValue && !selectedInRefs && <option value={selectedValue}>{selectedValue.slice(0, 12)} · current commit</option>}<optgroup label="Branches">{branchRefs.map((ref) => <option key={`branch:${ref.name}`} value={ref.name}>{ref.name}{ref.isDefault ? ' · default' : ''}</option>)}</optgroup>{tagRefs.length > 0 && <optgroup label="Tags">{tagRefs.map((ref) => <option key={`tag:${ref.name}`} value={ref.name}>{ref.name}</option>)}</optgroup>}</select></label>;
-}
-
 function MarkdownImage({ src, alt, provider, owner, repository, documentPath, assetRef, ...props }: ImgHTMLAttributes<HTMLImageElement> & { provider: RepositoryProvider; owner: string; repository: string; documentPath: string; assetRef?: string }) {
   const [resolvedSrc, setResolvedSrc] = useState(src);
   useEffect(() => {
@@ -96,7 +87,6 @@ function YamlRendererBlock({ name, source, registry, context }: { name: string; 
 
 export default function DocsPage() {
   const { '*': wildcard = '' } = useParams();
-  const location = useLocation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [tree, setTree] = useState<TreeNode[]>([]);
@@ -112,6 +102,8 @@ export default function DocsPage() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [diff, setDiff] = useState<DiffResult | null>(null);
+  const [comparisonBefore, setComparisonBefore] = useState<string | null>(null);
+  const [comparisonAfter, setComparisonAfter] = useState<string | null>(null);
   const [diffLoading, setDiffLoading] = useState(false);
   const [diffError, setDiffError] = useState<string | null>(null);
   const rendererRegistry = useDocsRendererRegistry();
@@ -166,12 +158,6 @@ export default function DocsPage() {
     setSidebarOpen(false);
   }, [navigate, owner, repository, searchParams]);
 
-  const changeRef = useCallback((nextRef: string) => {
-    const query = new URLSearchParams(searchParams);
-    query.set('ref', nextRef);
-    navigate(`${location.pathname}?${query.toString()}`);
-  }, [location.pathname, navigate, searchParams]);
-
   useEffect(() => {
     if (!selectedDocument || !provider) return;
     if (viewMode !== 'document') { setContentLoading(false); setContentError(null); setSource(null); return; }
@@ -201,32 +187,37 @@ export default function DocsPage() {
   useEffect(() => {
     if (viewMode !== 'diff' || !selectedDocument || !provider || !fromRef || !toRef) return;
     let cancelled = false;
-    setDiffLoading(true); setDiffError(null); setDiff(null);
-    provider.compare({ owner, repository, path: selectedDocument.path, ref: activeRef, from: fromRef, to: toRef }).then((result) => { if (!cancelled) setDiff(result); }).catch((reason: unknown) => { if (!cancelled) setDiffError(reason instanceof Error ? reason.message : '无法比较文档版本。'); }).finally(() => { if (!cancelled) setDiffLoading(false); });
+    setDiffLoading(true); setDiffError(null); setDiff(null); setComparisonBefore(null); setComparisonAfter(null);
+    const readVersion = (ref: string) => provider.getFile({ owner, repository, path: selectedDocument.path, ref }).catch(() => '');
+    Promise.all([provider.compare({ owner, repository, path: selectedDocument.path, ref: activeRef, from: fromRef, to: toRef }), readVersion(fromRef), readVersion(toRef)]).then(([result, before, after]) => { if (!cancelled) { setDiff(result); setComparisonBefore(before); setComparisonAfter(after); } }).catch((reason: unknown) => { if (!cancelled) setDiffError(reason instanceof Error ? reason.message : '无法比较文档版本。'); }).finally(() => { if (!cancelled) setDiffLoading(false); });
     return () => { cancelled = true; };
   }, [activeRef, fromRef, owner, provider, repository, selectedDocument, toRef, viewMode]);
 
-  if (loading) return <div className="docs-shell"><Topbar owner={owner} repository={repository} ref={ref} defaultRef={defaultRef} scope={scope} source={sourceKind} localMode={localMode} refs={refs} onRefChange={changeRef} onMenu={() => setSidebarOpen(true)} /><LoadingState source={sourceKind} /></div>;
-  if (error && !tree.length) return <div className="docs-shell"><Topbar owner={owner} repository={repository} ref={ref} defaultRef={defaultRef} scope={scope} source={sourceKind} localMode={localMode} refs={refs} onRefChange={changeRef} onMenu={() => setSidebarOpen(true)} /><ErrorState message={error} actionHref={sourceKind === 'local' ? `/?mode=${localMode === 'git' ? 'local-git' : 'local-folder'}` : '/'} actionLabel={sourceKind === 'local' ? localMode === 'git' ? '重新设置本地 Git' : '重新设置本地文档' : '返回首页'} /></div>;
-  if (!tree.length) return <div className="docs-shell"><Topbar owner={owner} repository={repository} ref={ref} defaultRef={defaultRef} scope={scope} source={sourceKind} localMode={localMode} refs={refs} onRefChange={changeRef} onMenu={() => setSidebarOpen(true)} /><ErrorState message={scope ? `目录 “${scope}” 中没有发现 Markdown 或 MDX 文件。` : '文档空间中没有发现 Markdown 或 MDX 文件。'} /></div>;
-  if (!selectedDocument) return <div className="docs-shell"><Topbar owner={owner} repository={repository} ref={ref} defaultRef={defaultRef} scope={scope} source={sourceKind} localMode={localMode} refs={refs} onRefChange={changeRef} onMenu={() => setSidebarOpen(true)} /><ErrorState message="找不到请求的 Markdown 文档，请从左侧目录选择一个页面。" /></div>;
+  if (loading) return <div className="docs-shell"><Topbar owner={owner} repository={repository} scope={scope} source={sourceKind} localMode={localMode} onMenu={() => setSidebarOpen(true)} /><LoadingState source={sourceKind} /></div>;
+  if (error && !tree.length) return <div className="docs-shell"><Topbar owner={owner} repository={repository} scope={scope} source={sourceKind} localMode={localMode} onMenu={() => setSidebarOpen(true)} /><ErrorState message={error} actionHref={sourceKind === 'local' ? `/?mode=${localMode === 'git' ? 'local-git' : 'local-folder'}` : '/'} actionLabel={sourceKind === 'local' ? localMode === 'git' ? '重新设置本地 Git' : '重新设置本地文档' : '返回首页'} /></div>;
+  if (!tree.length) return <div className="docs-shell"><Topbar owner={owner} repository={repository} scope={scope} source={sourceKind} localMode={localMode} onMenu={() => setSidebarOpen(true)} /><ErrorState message={scope ? `目录 “${scope}” 中没有发现 Markdown 或 MDX 文件。` : '文档空间中没有发现 Markdown 或 MDX 文件。'} /></div>;
+  if (!selectedDocument) return <div className="docs-shell"><Topbar owner={owner} repository={repository} scope={scope} source={sourceKind} localMode={localMode} onMenu={() => setSidebarOpen(true)} /><ErrorState message="找不到请求的 Markdown 文档，请从左侧目录选择一个页面。" /></div>;
 
   const parsed = source ? parseFrontmatter(source.content) : null;
   const viewQuery = new URLSearchParams(searchParams);
   viewQuery.delete('from');
   viewQuery.delete('to');
-  const viewQueryString = viewQuery.toString();
+  viewQuery.delete('ref');
+  viewQuery.delete('historyVersion');
+  const currentViewQueryString = viewQuery.toString();
   const documentUrl = encodeDocumentUrl(owner, repository, selectedDocument.path);
-  const documentHref = `${documentUrl}${viewQueryString ? `?${viewQueryString}` : ''}`;
-  const historyPath = `${documentUrl}/history${viewQueryString ? `?${viewQueryString}` : ''}`;
-  const diffPath = `${documentUrl}/diff${viewQueryString ? `?${viewQueryString}` : ''}`;
+  const documentHref = `${documentUrl}${currentViewQueryString ? `?${currentViewQueryString}` : ''}`;
+  const historyPath = `${documentUrl}/history${currentViewQueryString ? `?${currentViewQueryString}` : ''}`;
+  const diffPath = `${documentUrl}/diff${currentViewQueryString ? `?${currentViewQueryString}` : ''}`;
+  const isHistoricalVersion = viewMode === 'document' && searchParams.get('historyVersion') === '1';
+  const hideDocumentDirectory = isHistoricalVersion || viewMode === 'history' || viewMode === 'diff';
   const diffViewError = viewMode === 'diff' && (!fromRef || !toRef) ? '请在 diff URL 中提供 from 和 to 两个版本，例如 ?from=abc123&to=def456。' : diffError;
-  const viewContent = viewMode === 'history' ? <HistoryView commits={history} loading={historyLoading} error={historyError} documentPath={selectedDocument.path} documentHref={documentHref} diffPath={diffPath} currentRef={currentVersion} sourceKind={sourceKind} /> : viewMode === 'diff' ? <DiffView diff={diff} loading={diffLoading} error={diffViewError} historyPath={historyPath} /> : contentLoading ? <div className="document-skeleton"><div /><div /><div /><div /></div> : contentError ? <div className="inline-error">{contentError}</div> : !parsed ? <div className="document-skeleton"><div /><div /><div /><div /></div> : <><div className="document-meta"><span>{selectedDocument.path}</span>{activeRef && <span className="ref-badge">{activeRef.slice(0, 12)}</span>}<span className="document-actions"><Link to={historyPath}>History</Link></span></div><article className="markdown-body"><h1>{parsed.title}</h1><ReactMarkdown remarkPlugins={[remarkGfm]} components={{ h1: () => null, a: ({ href, children, ...props }) => <a href={href} {...props} target={href?.startsWith('http') ? '_blank' : undefined} rel={href?.startsWith('http') ? 'noreferrer' : undefined}>{children}</a>, img: ({ src, alt, ...props }) => provider ? <MarkdownImage src={src} alt={alt} provider={provider} owner={owner} repository={repository} documentPath={selectedDocument.path} assetRef={activeRef} {...props} /> : null, code: ({ className, children, node, ...props }) => { const language = className?.replace('language-', ''); const rendererName = language === 'yaml' ? rendererNameFromMeta(readCodeMeta(node)) : undefined; if (rendererName) return <YamlRendererBlock name={rendererName} source={String(children).trim()} registry={rendererRegistry} context={{ documentPath: selectedDocument.path, repository, ref: activeRef, scope }} />; return <code className={`${className || ''} code-inline`} data-language={language} {...props}>{children}</code>; } }}>{parsed.content}</ReactMarkdown></article></>;
-  return <div className="docs-shell"><Topbar owner={owner} repository={repository} ref={ref} defaultRef={defaultRef} scope={scope} source={sourceKind} localMode={localMode} refs={refs} onRefChange={changeRef} onMenu={() => setSidebarOpen(true)} /><div className={`docs-layout ${sidebarOpen ? 'sidebar-visible' : ''}`}><div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} /><Sidebar tree={tree} activePath={activePath} onNavigate={openDocument} /><main className="docs-main"><div className="document-wrap">{viewContent}{viewMode === 'document' && !contentLoading && !contentError && parsed && <div className="document-footer"><span>Powered by Git MD Viewer</span><span className="footer-note">{refs.length > 0 ? 'Local Git · read-only' : sourceKind === 'local' ? 'Local folder · read-only' : `${sourceKind} · ${scope}`}</span></div>}</div></main></div></div>;
+  const viewContent = viewMode === 'history' ? <HistoryView commits={history} loading={historyLoading} error={historyError} documentPath={selectedDocument.path} documentHref={documentHref} diffPath={diffPath} currentRef={currentVersion} sourceKind={sourceKind} /> : viewMode === 'diff' ? <DiffView diff={diff} before={comparisonBefore} after={comparisonAfter} provider={provider} owner={owner} repository={repository} documentPath={selectedDocument.path} loading={diffLoading} error={diffViewError} historyPath={historyPath} /> : contentLoading ? <div className="document-skeleton"><div /><div /><div /><div /></div> : contentError ? <div className="inline-error">{contentError}</div> : !parsed ? <div className="document-skeleton"><div /><div /><div /><div /></div> : <><div className="document-meta"><span>{selectedDocument.path}</span>{activeRef && <span className="ref-badge">{activeRef.slice(0, 12)}</span>}<span className="document-actions"><Link to={historyPath}>{isHistoricalVersion ? '返回历史一览' : 'History'}</Link></span></div><article className="markdown-body"><h1>{parsed.title}</h1><ReactMarkdown remarkPlugins={[remarkGfm]} components={{ h1: () => null, a: ({ href, children, ...props }) => <a href={href} {...props} target={href?.startsWith('http') ? '_blank' : undefined} rel={href?.startsWith('http') ? 'noreferrer' : undefined}>{children}</a>, img: ({ src, alt, ...props }) => provider ? <MarkdownImage src={src} alt={alt} provider={provider} owner={owner} repository={repository} documentPath={selectedDocument.path} assetRef={activeRef} {...props} /> : null, code: ({ className, children, node, ...props }) => { const language = className?.replace('language-', ''); const rendererName = language === 'yaml' ? rendererNameFromMeta(readCodeMeta(node)) : undefined; if (rendererName) return <YamlRendererBlock name={rendererName} source={String(children).trim()} registry={rendererRegistry} context={{ documentPath: selectedDocument.path, repository, ref: activeRef, scope }} />; return <code className={`${className || ''} code-inline`} data-language={language} {...props}>{children}</code>; } }}>{parsed.content}</ReactMarkdown></article></>;
+  return <div className="docs-shell"><Topbar owner={owner} repository={repository} scope={scope} source={sourceKind} localMode={localMode} showMenu={!hideDocumentDirectory} onMenu={() => setSidebarOpen(true)} /><div className={`docs-layout ${!hideDocumentDirectory && sidebarOpen ? 'sidebar-visible' : ''}`}>{!hideDocumentDirectory && <><div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} /><Sidebar tree={tree} activePath={activePath} onNavigate={openDocument} /></>}<main className="docs-main"><div className="document-wrap">{viewContent}{viewMode === 'document' && !contentLoading && !contentError && parsed && <div className="document-footer"><span>Powered by Git MD Viewer</span><span className="footer-note">{refs.length > 0 ? 'Local Git · read-only' : sourceKind === 'local' ? 'Local folder · read-only' : `${sourceKind} · ${scope}`}</span></div>}</div></main></div></div>;
 }
 
-function Topbar({ owner, repository, ref, defaultRef, scope, source, localMode, refs, onRefChange, onMenu }: { owner: string; repository: string; ref?: string; defaultRef?: string; scope?: string; source: SourceKind; localMode: 'folder' | 'git'; refs: RepositoryRef[]; onRefChange: (value: string) => void; onMenu: () => void }) {
+function Topbar({ owner, repository, scope, source, localMode, showMenu = true, onMenu }: { owner: string; repository: string; scope?: string; source: SourceKind; localMode: 'folder' | 'git'; showMenu?: boolean; onMenu: () => void }) {
   const sourceLabel = source === 'bitbucket' ? 'Bitbucket' : source === 'local' ? 'Local' : 'GitHub';
-  const switcher = source === 'local' ? (localMode === 'git' ? { href: '/?mode=repository', label: '设置在线 Git' } : { href: '/?mode=local-git', label: '设置本地 Git' }) : { href: '/?mode=repository', label: '打开 Git 仓库' };
-  return <header className="docs-topbar"><button className="mobile-menu" onClick={onMenu} aria-label="打开目录">☰</button><Link to="/" className="topbar-brand"><span className="brand-mark">MD</span><span>Git MD Viewer</span></Link><span className="topbar-divider">/</span><span className="source-badge">{sourceLabel}</span><span className="repo-name">{owner && repository ? `${owner}/${repository}` : 'Local folder'}</span><span className="topbar-spacer" />{refs.length > 0 && <RefPicker refs={refs} value={ref} defaultRef={defaultRef} onChange={onRefChange} />}{scope && <span className="topbar-scope">scope: {scope}</span>}<Link className="repo-switcher" to={switcher.href}>{switcher.label}</Link><Link className="repo-switcher" to="/?mode=local-folder">设置本地文档</Link><a className="github-link" href={source === 'github' && owner && repository ? `https://github.com/${owner}/${repository}` : source === 'bitbucket' && owner && repository ? `https://bitbucket.org/${owner}/${repository}` : '#'} target={source === 'local' ? undefined : '_blank'} rel={source === 'local' ? undefined : 'noreferrer'}>View source ↗</a></header>;
+  const settingsHref = source === 'local' ? `/?mode=${localMode === 'git' ? 'local-git' : 'local-folder'}` : '/?mode=repository';
+  return <header className="docs-topbar">{showMenu && <button className="mobile-menu" onClick={onMenu} aria-label="打开目录">☰</button>}<Link to="/" className="topbar-brand"><span className="brand-mark">MD</span><span>Git MD Viewer</span></Link><span className="topbar-divider">/</span><span className="source-badge">{sourceLabel}</span><span className="repo-name">{owner && repository ? `${owner}/${repository}` : 'Local folder'}</span><span className="topbar-spacer" />{scope && <span className="topbar-scope">当前文档目录: {scope}</span>}<Link className="repo-switcher" to={settingsHref}>进入设置</Link></header>;
 }

@@ -28,6 +28,33 @@ type DirectoryPickerWindow = Window & typeof globalThis & {
   showDirectoryPicker?: () => Promise<FileSystemDirectoryHandle>;
 };
 
+type PathAwareFile = File & { path?: string };
+type PathAwareDirectoryHandle = FileSystemDirectoryHandle & { path?: string; fullPath?: string };
+
+function isAbsolutePath(path: string): boolean {
+  return /^(?:[A-Za-z]:[\\/]|\\\\|\/)/.test(path);
+}
+
+function absolutePathFromFiles(files: File[]): string {
+  const first = files[0] as PathAwareFile | undefined;
+  const filePath = first?.path;
+  const relativePath = first?.webkitRelativePath;
+  if (!filePath || !relativePath || !isAbsolutePath(filePath)) return '';
+
+  const normalizedFilePath = filePath.replaceAll('\\', '/');
+  const normalizedRelativePath = relativePath.replaceAll('\\', '/');
+  const suffix = `/${normalizedRelativePath}`;
+  return normalizedFilePath.endsWith(suffix)
+    ? normalizedFilePath.slice(0, -suffix.length)
+    : '';
+}
+
+function absolutePathFromHandle(handle: FileSystemDirectoryHandle): string {
+  const pathAwareHandle = handle as PathAwareDirectoryHandle;
+  const path = pathAwareHandle.path || pathAwareHandle.fullPath || '';
+  return isAbsolutePath(path) ? path.replaceAll('\\', '/') : '';
+}
+
 export async function readDirectoryLevel(handle: FileSystemDirectoryHandle, prefix = ''): Promise<LocalDirectoryLevel> {
   const files: LocalFolderHandle[] = [];
   const directories: LocalDirectoryHandle[] = [];
@@ -54,7 +81,7 @@ export function LocalFolderPicker({ onSelect, compact = false, label, compactLab
     const files = event.target.files;
     if (files?.length) {
       const selected = Array.from(files);
-      const selectedPath = selected[0]?.webkitRelativePath?.split('/')[0] || '';
+      const selectedPath = absolutePathFromFiles(selected) || selected[0]?.webkitRelativePath?.split('/')[0] || '';
       onSelect(selected, selectedPath);
     }
     event.target.value = '';
@@ -67,7 +94,7 @@ export function LocalFolderPicker({ onSelect, compact = false, label, compactLab
       try {
         const handle = await picker();
         const level = await readDirectoryLevel(handle);
-        onSelect(level.files, handle.name, { rootDirectory: handle, directories: level.directories });
+        onSelect(level.files, absolutePathFromHandle(handle) || handle.name, { rootDirectory: handle, directories: level.directories });
       } catch {
         // 用户取消文件夹选择时保持当前文档不变。
       } finally {
@@ -78,6 +105,6 @@ export function LocalFolderPicker({ onSelect, compact = false, label, compactLab
     inputRef.current?.click();
   };
 
-  const buttonLabel = loading ? '正在读取目录…' : compact ? compactLabel || '本地文档' : label || '选择本地 Markdown 文件夹';
+  const buttonLabel = loading ? '正在读取目录…' : compact ? compactLabel || '本地文档' : label || '选择本地文档文件夹';
   return <><button type="button" className={`local-folder-picker ${compact ? 'compact' : ''}`} onClick={chooseFolder} disabled={loading}>{buttonLabel}</button><input ref={inputRef} className="local-folder-input" type="file" multiple {...{ webkitdirectory: '', directory: '' }} onChange={handleChange} /></>;
 }
