@@ -1,7 +1,12 @@
 import type {
   AssetQuery, Commit, CompareQuery, DiffResult, FileQuery, HistoryQuery, RepositoryEntry, RepositoryProvider, RepositoryRef, TreeQuery,
 } from '../types';
-import type { LocalFolderFile, LocalFolderSelection } from '../LocalFolderPicker';
+import type { LocalFolderSelection } from '../LocalFolderPicker';
+
+interface LocalFileRecord {
+  file?: File;
+  handle?: FileSystemFileHandle;
+}
 
 function normalizePath(path: string): string {
   return path.replaceAll('\\', '/').replace(/^\/+/, '').replace(/\/+/g, '/');
@@ -9,17 +14,21 @@ function normalizePath(path: string): string {
 
 export class LocalFolderProvider implements RepositoryProvider {
   readonly kind = 'local' as const;
-  private readonly files = new Map<string, File>();
+  private readonly files = new Map<string, LocalFileRecord>();
   private readonly objectUrls = new Map<string, string>();
 
   constructor(files: Iterable<LocalFolderSelection>) {
-    const selectedFiles = [...files].map((item) => 'file' in item ? item : { file: item, path: item.webkitRelativePath || item.name });
+    const selectedFiles = [...files].map((item) => {
+      if ('handle' in item) return { handle: item.handle, path: item.path };
+      if ('file' in item) return { file: item.file, path: item.path };
+      return { file: item, path: item.webkitRelativePath || item.name };
+    });
     const rawPaths = selectedFiles.map((item) => normalizePath(item.path));
     const firstParts = rawPaths.map((path) => path.split('/')[0]);
     const commonRoot = firstParts.length > 0 && firstParts.every((part) => part === firstParts[0]) ? `${firstParts[0]}/` : '';
     selectedFiles.forEach((item, index) => {
       const path = commonRoot ? rawPaths[index].slice(commonRoot.length) : rawPaths[index];
-      this.files.set(path, item.file);
+      this.files.set(path, { file: item.file, handle: item.handle });
     });
   }
 
@@ -27,7 +36,7 @@ export class LocalFolderProvider implements RepositoryProvider {
     const root = normalizePath(input.rootPath || '');
     return [...this.files.entries()]
       .filter(([path]) => !root || path === root || path.startsWith(`${root}/`))
-      .map(([path, file]) => ({ path, type: 'file' as const, size: file.size }));
+      .map(([path, record]) => ({ path, type: 'file' as const, size: record.file?.size }));
   }
 
   async getRefs(_input: TreeQuery): Promise<RepositoryRef[]> {
@@ -37,16 +46,25 @@ export class LocalFolderProvider implements RepositoryProvider {
   async getFile(input: FileQuery): Promise<string> {
     const file = this.files.get(normalizePath(input.path));
     if (!file) throw new Error(`本地文件不存在：${input.path}`);
-    return file.text();
+    const fileObject = file.file || (file.handle ? await file.handle.getFile() : undefined);
+    if (!fileObject) throw new Error(`无法读取本地文件：${input.path}`);
+    return fileObject.text();
   }
 
-  getAssetUrl(input: AssetQuery): string {
+  async getAssetUrl(input: AssetQuery): Promise<string> {
     const path = normalizePath(input.path);
     const file = this.files.get(path);
     if (!file) return '';
     const existing = this.objectUrls.get(path);
     if (existing) return existing;
-    const url = URL.createObjectURL(file);
+    const fileObject = file.file || (file.handle ? file.handle.getFile() : undefined);
+    if (fileObject instanceof Promise) return fileObject.then((value) => {
+      const url = URL.createObjectURL(value);
+      this.objectUrls.set(path, url);
+      return url;
+    });
+    if (!fileObject) return '';
+    const url = URL.createObjectURL(fileObject);
     this.objectUrls.set(path, url);
     return url;
   }

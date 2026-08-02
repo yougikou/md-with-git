@@ -8,6 +8,7 @@ import { documentCacheKey, readMarkdownCache, writeMarkdownCache } from './cache
 import { LocalFolderPicker, type LocalFolderSelection } from './LocalFolderPicker';
 import { BitbucketProvider, getLocalFolder, GitHubProvider, registerLocalFolder } from './providers';
 import type { DocumentNode, RepositoryEntry, RepositoryProvider, RepositoryRef, TreeNode } from './types';
+import type { ImgHTMLAttributes } from 'react';
 
 const githubProvider = new GitHubProvider();
 const bitbucketProvider = new BitbucketProvider();
@@ -43,6 +44,18 @@ function RefPicker({ refs, value, defaultRef, onChange }: { refs: RepositoryRef[
   const branchRefs = refs.filter((ref) => ref.type === 'branch');
   const tagRefs = refs.filter((ref) => ref.type === 'tag');
   return <label className="ref-picker"><span>VERSION</span><select value={value || defaultRef || ''} onChange={(event) => onChange(event.target.value)} aria-label="选择文档版本"><optgroup label="Branches">{branchRefs.map((ref) => <option key={`branch:${ref.name}`} value={ref.name}>{ref.name}{ref.isDefault ? ' · default' : ''}</option>)}</optgroup>{tagRefs.length > 0 && <optgroup label="Tags">{tagRefs.map((ref) => <option key={`tag:${ref.name}`} value={ref.name}>{ref.name}</option>)}</optgroup>}</select></label>;
+}
+
+function MarkdownImage({ src, alt, provider, owner, repository, documentPath, assetRef, ...props }: ImgHTMLAttributes<HTMLImageElement> & { provider: RepositoryProvider; owner: string; repository: string; documentPath: string; assetRef?: string }) {
+  const [resolvedSrc, setResolvedSrc] = useState(src);
+  useEffect(() => {
+    let cancelled = false;
+    if (!src || /^(?:[a-z]+:)?\/\//i.test(src) || src.startsWith('data:') || src.startsWith('#')) { setResolvedSrc(src); return () => { cancelled = true; }; }
+    const assetPath = resolveAssetPath(documentPath, src);
+    Promise.resolve(provider.getAssetUrl({ owner, repository, path: assetPath, ref: assetRef })).then((url) => { if (!cancelled) setResolvedSrc(url || src); });
+    return () => { cancelled = true; };
+  }, [assetRef, documentPath, owner, provider, repository, src]);
+  return <img {...props} src={resolvedSrc} alt={alt || ''} />;
 }
 
 function sourceFromQuery(value: string | null): SourceKind {
@@ -118,13 +131,14 @@ export default function DocsPage() {
   useEffect(() => {
     if (!selectedDocument || !provider) return;
     const query = { owner, repository, path: selectedDocument.path, ref: activeRef };
-    const cacheKey = documentCacheKey(provider.kind, { ...query, owner: sourceKind === 'local' ? (localId || owner) : owner });
+    const cacheKey = provider.kind === 'local' ? null : documentCacheKey(provider.kind, { ...query, owner: owner });
     let cancelled = false;
     setContentLoading(true); setSource(null); setError(null);
-    readMarkdownCache(cacheKey).then((cached) => {
+    const readContent = cacheKey ? readMarkdownCache(cacheKey).then((cached) => {
       if (cached !== null) return cached;
       return provider.getFile(query).then(async (content) => { await writeMarkdownCache(cacheKey, content); return content; });
-    }).then((content) => { if (!cancelled) setSource({ path: selectedDocument.path, content }); }).catch((reason: unknown) => { if (!cancelled) setError(reason instanceof Error ? reason.message : '无法读取 Markdown 文件。'); }).finally(() => { if (!cancelled) setContentLoading(false); });
+    }) : provider.getFile(query);
+    readContent.then((content) => { if (!cancelled) setSource({ path: selectedDocument.path, content }); }).catch((reason: unknown) => { if (!cancelled) setError(reason instanceof Error ? reason.message : '无法读取 Markdown 文件。'); }).finally(() => { if (!cancelled) setContentLoading(false); });
     return () => { cancelled = true; };
   }, [activeRef, localId, owner, provider, repository, selectedDocument, sourceKind]);
 
@@ -134,11 +148,7 @@ export default function DocsPage() {
   if (!selectedDocument) return <div className="docs-shell"><Topbar owner={owner} repository={repository} ref={ref} defaultRef={defaultRef} scope={scope} source={sourceKind} refs={refs} onRefChange={changeRef} onOpenLocal={openLocalFolder} onMenu={() => setSidebarOpen(true)} /><ErrorState message="找不到请求的 Markdown 文档，请从左侧目录选择一个页面。" /></div>;
 
   const parsed = source ? parseFrontmatter(source.content) : null;
-  const renderImage = (src: string | undefined) => {
-    if (!src || /^(?:[a-z]+:)?\/\//i.test(src) || src.startsWith('data:') || src.startsWith('#')) return src;
-    return provider?.getAssetUrl({ owner, repository, path: resolveAssetPath(selectedDocument.path, src), ref: activeRef });
-  };
-  return <div className="docs-shell"><Topbar owner={owner} repository={repository} ref={ref} defaultRef={defaultRef} scope={scope} source={sourceKind} refs={refs} onRefChange={changeRef} onOpenLocal={openLocalFolder} onMenu={() => setSidebarOpen(true)} /><div className={`docs-layout ${sidebarOpen ? 'sidebar-visible' : ''}`}><div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} /><Sidebar tree={tree} activePath={activePath} onNavigate={openDocument} /><main className="docs-main"><div className="document-wrap">{contentLoading || !parsed ? <div className="document-skeleton"><div /><div /><div /><div /></div> : <><div className="document-meta"><span>{selectedDocument.path}</span>{activeRef && <span className="ref-badge">{activeRef.slice(0, 12)}</span>}</div><article className="markdown-body"><h1>{parsed.title}</h1><ReactMarkdown remarkPlugins={[remarkGfm]} components={{ h1: () => null, a: ({ href, children, ...props }) => <a href={href} {...props} target={href?.startsWith('http') ? '_blank' : undefined} rel={href?.startsWith('http') ? 'noreferrer' : undefined}>{children}</a>, img: ({ src, alt, ...props }) => <img src={renderImage(src) || src} alt={alt || ''} {...props} />, code: ({ className, children, ...props }) => { const language = className?.replace('language-', ''); return <code className={`${className || ''} code-inline`} data-language={language} {...props}>{children}</code>; } }}>{parsed.content}</ReactMarkdown></article><div className="document-footer"><span>Powered by Git MD Viewer</span><span className="footer-note">{sourceKind === 'local' ? 'Local folder' : `${sourceKind} · ${scope}`}</span></div></>}</div></main></div></div>;
+  return <div className="docs-shell"><Topbar owner={owner} repository={repository} ref={ref} defaultRef={defaultRef} scope={scope} source={sourceKind} refs={refs} onRefChange={changeRef} onOpenLocal={openLocalFolder} onMenu={() => setSidebarOpen(true)} /><div className={`docs-layout ${sidebarOpen ? 'sidebar-visible' : ''}`}><div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} /><Sidebar tree={tree} activePath={activePath} onNavigate={openDocument} /><main className="docs-main"><div className="document-wrap">{contentLoading || !parsed ? <div className="document-skeleton"><div /><div /><div /><div /></div> : <><div className="document-meta"><span>{selectedDocument.path}</span>{activeRef && <span className="ref-badge">{activeRef.slice(0, 12)}</span>}</div><article className="markdown-body"><h1>{parsed.title}</h1><ReactMarkdown remarkPlugins={[remarkGfm]} components={{ h1: () => null, a: ({ href, children, ...props }) => <a href={href} {...props} target={href?.startsWith('http') ? '_blank' : undefined} rel={href?.startsWith('http') ? 'noreferrer' : undefined}>{children}</a>, img: ({ src, alt, ...props }) => provider ? <MarkdownImage src={src} alt={alt} provider={provider} owner={owner} repository={repository} documentPath={selectedDocument.path} assetRef={activeRef} {...props} /> : null, code: ({ className, children, ...props }) => { const language = className?.replace('language-', ''); return <code className={`${className || ''} code-inline`} data-language={language} {...props}>{children}</code>; } }}>{parsed.content}</ReactMarkdown></article><div className="document-footer"><span>Powered by Git MD Viewer</span><span className="footer-note">{sourceKind === 'local' ? 'Local folder · read-only' : `${sourceKind} · ${scope}`}</span></div></>}</div></main></div></div>;
 }
 
 function Topbar({ owner, repository, ref, defaultRef, scope, source, refs, onRefChange, onOpenLocal, onMenu }: { owner: string; repository: string; ref?: string; defaultRef?: string; scope?: string; source: SourceKind; refs: RepositoryRef[]; onRefChange: (value: string) => void; onOpenLocal: (files: LocalFolderSelection[]) => void; onMenu: () => void }) {

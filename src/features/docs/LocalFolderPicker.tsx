@@ -6,18 +6,23 @@ export interface LocalFolderFile {
   path: string;
 }
 
-export type LocalFolderSelection = File | LocalFolderFile;
+export interface LocalFolderHandle {
+  handle: FileSystemFileHandle;
+  path: string;
+}
+
+export type LocalFolderSelection = File | LocalFolderFile | LocalFolderHandle;
 
 type DirectoryPickerWindow = Window & typeof globalThis & {
   showDirectoryPicker?: () => Promise<FileSystemDirectoryHandle>;
 };
 
-async function readDirectory(handle: FileSystemDirectoryHandle, prefix = ''): Promise<LocalFolderFile[]> {
-  const files: LocalFolderFile[] = [];
+async function readDirectory(handle: FileSystemDirectoryHandle, prefix = ''): Promise<LocalFolderHandle[]> {
+  const files: LocalFolderHandle[] = [];
   const directory = handle as FileSystemDirectoryHandle & { values: () => AsyncIterableIterator<FileSystemHandle> };
   for await (const entry of directory.values()) {
     const path = `${prefix}${entry.name}`;
-    if (entry.kind === 'file') files.push({ file: await (entry as FileSystemFileHandle).getFile(), path });
+    if (entry.kind === 'file') files.push({ handle: entry as FileSystemFileHandle, path });
     else files.push(...await readDirectory(entry as FileSystemDirectoryHandle, `${path}/`));
   }
   return files;

@@ -54,7 +54,7 @@ export interface RepositoryProvider {
   readonly kind: 'github' | 'bitbucket' | 'local';
   getTree(input: TreeQuery): Promise<RepositoryEntry[]>;
   getFile(input: FileQuery): Promise<string>;
-  getAssetUrl(input: AssetQuery): string;
+  getAssetUrl(input: AssetQuery): string | Promise<string>;
   getRefs(input: TreeQuery): Promise<RepositoryRef[]>;
   getFileHistory(input: HistoryQuery): Promise<Commit[]>;
   compare(input: CompareQuery): Promise<DiffResult>;

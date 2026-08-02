@@ -25,7 +25,7 @@ Bitbucket Cloud 的文档空间使用 `source=bitbucket`，其中 `<owner>` 对�
 /docs/<workspace>/<repository>/docs?source=bitbucket&scope=docs
 ```
 
-本地测试：在首页选择本地文件夹，选择 `tests/fixtures/docs` 目录后，Viewer 会在不上传文件的情况下读取该文件夹。
+本地测试：在首页或文档页顶栏选择本地文件夹，选择 `tests/fixtures/docs` 目录后，Viewer 会按需只读该文件夹，不上传、不复制整目录，也不会将本地 Markdown 写入 IndexedDB。
 浏览器应弹出文件夹选择器；如果浏览器不支持原生目录选择，则使用目录上传兼容模式。
 
 ## 验收清单

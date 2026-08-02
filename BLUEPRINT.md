@@ -331,6 +331,8 @@ LocalFolderProvider
 - Bitbucket Cloud 通过 `source=bitbucket` 选择，`owner` 对应 workspace，`repository` 对应 repo slug。
 - 本地文件夹通过首页或文档页顶栏的目录选择入口载入，文件只在浏览器内读取，不上传到服务器；支持的浏览器
   优先使用 File System Access API，不支持时回退到 `webkitdirectory`，拖拽入口留作增强。
+- 本地模式只保存用户授权目录中的文件句柄，按需读取当前 Markdown 或资源文件；本地来源不写入
+  IndexedDB Markdown 缓存。
 - `scope` 仍然是文档空间根目录，Provider 的文件树和渲染路由不会越过该边界。
 
 进入条件：Phase 1 的 GitHub 公共仓库手动验收通过，并完成 `tests/` 中的测试夹具检查。
