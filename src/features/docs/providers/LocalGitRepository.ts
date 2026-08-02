@@ -9,8 +9,8 @@ interface LocalStat {
   isDirectory: () => boolean;
 }
 
-function normalize(path: string): string {
-  return path.replaceAll('\\', '/').replace(/^\/+/, '').replace(/\/+/g, '/');
+function normalize(path: string | null | undefined): string {
+  return (path || '').replaceAll('\\', '/').replace(/^\/+/, '').replace(/\/+/g, '/');
 }
 
 function decode(bytes: Uint8Array): string {
@@ -44,6 +44,7 @@ export class LocalGitRepository {
     };
     const stat = async (path: string): Promise<LocalStat> => {
       const relative = this.relativePath(path);
+      if (!relative) return { isFile: () => false, isDirectory: () => true };
       const files = [...this.listLocalFiles()].map(normalize);
       if (files.includes(relative)) return { isFile: () => true, isDirectory: () => false };
       if (files.some((file) => file.startsWith(`${relative}/`))) return { isFile: () => false, isDirectory: () => true };
@@ -66,7 +67,7 @@ export class LocalGitRepository {
     this.fs = { promises: { readFile, readdir, stat, lstat: stat, readlink: readOnly, writeFile: readOnly, unlink: readOnly, mkdir: readOnly, rmdir: readOnly, symlink: readOnly } };
   }
 
-  private relativePath(path: string): string {
+  private relativePath(path: string | null | undefined): string {
     const normalized = normalize(path);
     const prefix = normalize(this.dir) + '/';
     return normalized.startsWith(prefix) ? normalized.slice(prefix.length) : normalized;

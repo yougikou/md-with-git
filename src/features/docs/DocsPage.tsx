@@ -50,7 +50,7 @@ function RefPicker({ refs, value, defaultRef, onChange }: { refs: RepositoryRef[
   if (!refs.length) return null;
   const branchRefs = refs.filter((ref) => ref.type === 'branch');
   const tagRefs = refs.filter((ref) => ref.type === 'tag');
-  const selectedValue = value || defaultRef || '';
+  const selectedValue = typeof value === 'string' ? value : typeof defaultRef === 'string' ? defaultRef : '';
   const selectedInRefs = refs.some((ref) => ref.name === selectedValue);
   return <label className="ref-picker"><span>VERSION</span><select value={selectedValue} onChange={(event) => onChange(event.target.value)} aria-label="选择文档版本">{selectedValue && !selectedInRefs && <option value={selectedValue}>{selectedValue.slice(0, 12)} · current commit</option>}<optgroup label="Branches">{branchRefs.map((ref) => <option key={`branch:${ref.name}`} value={ref.name}>{ref.name}{ref.isDefault ? ' · default' : ''}</option>)}</optgroup>{tagRefs.length > 0 && <optgroup label="Tags">{tagRefs.map((ref) => <option key={`tag:${ref.name}`} value={ref.name}>{ref.name}</option>)}</optgroup>}</select></label>;
 }

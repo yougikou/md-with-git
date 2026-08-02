@@ -16,6 +16,10 @@ function normalizePath(path: string): string {
   return path.replaceAll('\\', '/').replace(/^\/+/, '').replace(/\/+/g, '/');
 }
 
+function errorMessage(reason: unknown): string {
+  return reason instanceof Error ? reason.message : String(reason);
+}
+
 export class LocalFolderProvider implements RepositoryProvider {
   readonly kind = 'local' as const;
   private readonly mode: LocalFolderMode;
@@ -92,8 +96,12 @@ export class LocalFolderProvider implements RepositoryProvider {
     const root = normalizePath(input.rootPath || '');
     const gitRepository = await this.getGitRepository();
     if (gitRepository) {
-      const paths = await gitRepository.listFiles(input.ref);
-      return paths.filter((path) => !root || path === root || path.startsWith(`${root}/`)).map((path) => ({ path, type: 'file' as const }));
+      try {
+        const paths = await gitRepository.listFiles(input.ref);
+        return paths.filter((path) => !root || path === root || path.startsWith(`${root}/`)).map((path) => ({ path, type: 'file' as const }));
+      } catch (reason) {
+        throw new Error(`无法读取本地 Git 文档树：${errorMessage(reason)}`);
+      }
     }
     return [...this.files.entries()]
       .filter(([path]) => !root || path === root || path.startsWith(`${root}/`))
@@ -102,13 +110,24 @@ export class LocalFolderProvider implements RepositoryProvider {
 
   async getRefs(_input: TreeQuery): Promise<RepositoryRef[]> {
     const gitRepository = await this.getGitRepository();
-    return gitRepository ? gitRepository.getRefs() : [];
+    if (!gitRepository) return [];
+    try {
+      return await gitRepository.getRefs();
+    } catch (reason) {
+      throw new Error(`无法读取本地 Git 版本信息：${errorMessage(reason)}`);
+    }
   }
 
   async getFile(input: FileQuery): Promise<string> {
     await this.ready;
     const gitRepository = await this.getGitRepository();
-    if (gitRepository) return new TextDecoder().decode(await gitRepository.readFile(input.path, input.ref));
+    if (gitRepository) {
+      try {
+        return new TextDecoder().decode(await gitRepository.readFile(input.path, input.ref));
+      } catch (reason) {
+        throw new Error(`无法读取本地 Git 文档“${input.path}”：${errorMessage(reason)}`);
+      }
+    }
     const file = this.files.get(normalizePath(input.path));
     if (!file) throw new Error(`本地文件不存在：${input.path}`);
     const fileObject = file.file || (file.handle ? await file.handle.getFile() : undefined);
