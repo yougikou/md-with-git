@@ -15,6 +15,7 @@ import type { DocsRendererRegistry, YamlBlockContext } from './renderers';
 import { HistoryView } from './HistoryView';
 import { DiffView } from './DiffView';
 import type { Commit, DiffResult } from './types';
+import { encodeDocumentUrl, parseDocumentRoute } from './versionRoutes';
 
 const githubProvider = new GitHubProvider();
 const bitbucketProvider = new BitbucketProvider();
@@ -49,7 +50,9 @@ function RefPicker({ refs, value, defaultRef, onChange }: { refs: RepositoryRef[
   if (!refs.length) return null;
   const branchRefs = refs.filter((ref) => ref.type === 'branch');
   const tagRefs = refs.filter((ref) => ref.type === 'tag');
-  return <label className="ref-picker"><span>VERSION</span><select value={value || defaultRef || ''} onChange={(event) => onChange(event.target.value)} aria-label="选择文档版本"><optgroup label="Branches">{branchRefs.map((ref) => <option key={`branch:${ref.name}`} value={ref.name}>{ref.name}{ref.isDefault ? ' · default' : ''}</option>)}</optgroup>{tagRefs.length > 0 && <optgroup label="Tags">{tagRefs.map((ref) => <option key={`tag:${ref.name}`} value={ref.name}>{ref.name}</option>)}</optgroup>}</select></label>;
+  const selectedValue = value || defaultRef || '';
+  const selectedInRefs = refs.some((ref) => ref.name === selectedValue);
+  return <label className="ref-picker"><span>VERSION</span><select value={selectedValue} onChange={(event) => onChange(event.target.value)} aria-label="选择文档版本">{selectedValue && !selectedInRefs && <option value={selectedValue}>{selectedValue.slice(0, 12)} · current commit</option>}<optgroup label="Branches">{branchRefs.map((ref) => <option key={`branch:${ref.name}`} value={ref.name}>{ref.name}{ref.isDefault ? ' · default' : ''}</option>)}</optgroup>{tagRefs.length > 0 && <optgroup label="Tags">{tagRefs.map((ref) => <option key={`tag:${ref.name}`} value={ref.name}>{ref.name}</option>)}</optgroup>}</select></label>;
 }
 
 function MarkdownImage({ src, alt, provider, owner, repository, documentPath, assetRef, ...props }: ImgHTMLAttributes<HTMLImageElement> & { provider: RepositoryProvider; owner: string; repository: string; documentPath: string; assetRef?: string }) {
@@ -79,10 +82,6 @@ function rendererNameFromMeta(meta: string): string | undefined {
   return meta.match(/(?:^|\s)renderer=([^\s]+)/)?.[1];
 }
 
-function encodeDocumentUrl(owner: string, repository: string, path: string): string {
-  return `/docs/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}/${path.split('/').map(encodeURIComponent).join('/')}`;
-}
-
 function YamlRendererBlock({ name, source, registry, context }: { name: string; source: string; registry: DocsRendererRegistry; context: YamlBlockContext }) {
   let value: unknown;
   try {
@@ -107,6 +106,7 @@ export default function DocsPage() {
   const [defaultRef, setDefaultRef] = useState<string>();
   const [loading, setLoading] = useState(true);
   const [contentLoading, setContentLoading] = useState(false);
+  const [contentError, setContentError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [history, setHistory] = useState<Commit[]>([]);
@@ -121,8 +121,7 @@ export default function DocsPage() {
   const owner = segments[0] || '';
   const repository = segments[1] || '';
   const routedPath = segments.slice(2).join('/');
-  const viewMode = routedPath.endsWith('/history') ? 'history' : routedPath.endsWith('/diff') ? 'diff' : 'document';
-  const requestedPath = viewMode === 'document' ? routedPath : routedPath.slice(0, routedPath.lastIndexOf('/'));
+  const { documentPath: requestedPath, viewMode } = parseDocumentRoute(routedPath);
   const ref = searchParams.get('ref') || undefined;
   const scope = searchParams.get('scope')?.replace(/^\/+|\/+$/g, '') || undefined;
   const sourceKind = sourceFromQuery(searchParams.get('source'));
@@ -133,6 +132,7 @@ export default function DocsPage() {
   }, [localId, sourceKind]);
   const documentPath = scope && requestedPath === scope ? '' : requestedPath;
   const activeRef = sourceKind === 'local' ? undefined : ref || defaultRef;
+  const currentVersion = sourceKind === 'local' ? undefined : refs.find((item) => item.name === activeRef)?.sha || activeRef;
   const activePath = source?.path || documentPath;
 
   useEffect(() => {
@@ -173,16 +173,16 @@ export default function DocsPage() {
 
   useEffect(() => {
     if (!selectedDocument || !provider) return;
-    if (viewMode !== 'document') { setContentLoading(false); setSource(null); return; }
+    if (viewMode !== 'document') { setContentLoading(false); setContentError(null); setSource(null); return; }
     const query = { owner, repository, path: selectedDocument.path, ref: activeRef };
     const cacheKey = provider.kind === 'local' ? null : documentCacheKey(provider.kind, { ...query, owner: owner });
     let cancelled = false;
-    setContentLoading(true); setSource(null); setError(null);
+    setContentLoading(true); setSource(null); setContentError(null);
     const readContent = cacheKey ? readMarkdownCache(cacheKey).then((cached) => {
       if (cached !== null) return cached;
       return provider.getFile(query).then(async (content) => { await writeMarkdownCache(cacheKey, content); return content; });
     }) : provider.getFile(query);
-    readContent.then((content) => { if (!cancelled) setSource({ path: selectedDocument.path, content }); }).catch((reason: unknown) => { if (!cancelled) setError(reason instanceof Error ? reason.message : '无法读取 Markdown 文件。'); }).finally(() => { if (!cancelled) setContentLoading(false); });
+    readContent.then((content) => { if (!cancelled) setSource({ path: selectedDocument.path, content }); }).catch((reason: unknown) => { if (!cancelled) setContentError(reason instanceof Error ? reason.message : '无法读取 Markdown 文件。'); }).finally(() => { if (!cancelled) setContentLoading(false); });
     return () => { cancelled = true; };
   }, [activeRef, localId, owner, provider, repository, selectedDocument, sourceKind, viewMode]);
 
@@ -220,8 +220,8 @@ export default function DocsPage() {
   const historyPath = `${documentUrl}/history${viewQueryString ? `?${viewQueryString}` : ''}`;
   const diffPath = `${documentUrl}/diff${viewQueryString ? `?${viewQueryString}` : ''}`;
   const diffViewError = viewMode === 'diff' && (!fromRef || !toRef) ? '请在 diff URL 中提供 from 和 to 两个版本，例如 ?from=abc123&to=def456。' : diffError;
-  const viewContent = viewMode === 'history' ? <HistoryView commits={history} loading={historyLoading} error={historyError} documentPath={selectedDocument.path} documentHref={documentHref} diffPath={diffPath} currentRef={activeRef} sourceKind={sourceKind} /> : viewMode === 'diff' ? <DiffView diff={diff} loading={diffLoading} error={diffViewError} historyPath={historyPath} /> : contentLoading || !parsed ? <div className="document-skeleton"><div /><div /><div /><div /></div> : <><div className="document-meta"><span>{selectedDocument.path}</span>{activeRef && <span className="ref-badge">{activeRef.slice(0, 12)}</span>}<span className="document-actions"><Link to={historyPath}>History</Link></span></div><article className="markdown-body"><h1>{parsed.title}</h1><ReactMarkdown remarkPlugins={[remarkGfm]} components={{ h1: () => null, a: ({ href, children, ...props }) => <a href={href} {...props} target={href?.startsWith('http') ? '_blank' : undefined} rel={href?.startsWith('http') ? 'noreferrer' : undefined}>{children}</a>, img: ({ src, alt, ...props }) => provider ? <MarkdownImage src={src} alt={alt} provider={provider} owner={owner} repository={repository} documentPath={selectedDocument.path} assetRef={activeRef} {...props} /> : null, code: ({ className, children, node, ...props }) => { const language = className?.replace('language-', ''); const rendererName = language === 'yaml' ? rendererNameFromMeta(readCodeMeta(node)) : undefined; if (rendererName) return <YamlRendererBlock name={rendererName} source={String(children).trim()} registry={rendererRegistry} context={{ documentPath: selectedDocument.path, repository, ref: activeRef, scope }} />; return <code className={`${className || ''} code-inline`} data-language={language} {...props}>{children}</code>; } }}>{parsed.content}</ReactMarkdown></article></>;
-  return <div className="docs-shell"><Topbar owner={owner} repository={repository} ref={ref} defaultRef={defaultRef} scope={scope} source={sourceKind} refs={refs} onRefChange={changeRef} onOpenLocal={openLocalFolder} onMenu={() => setSidebarOpen(true)} /><div className={`docs-layout ${sidebarOpen ? 'sidebar-visible' : ''}`}><div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} /><Sidebar tree={tree} activePath={activePath} onNavigate={openDocument} /><main className="docs-main"><div className="document-wrap">{viewContent}{viewMode === 'document' && !contentLoading && parsed && <div className="document-footer"><span>Powered by Git MD Viewer</span><span className="footer-note">{sourceKind === 'local' ? 'Local folder · read-only' : `${sourceKind} · ${scope}`}</span></div>}</div></main></div></div>;
+  const viewContent = viewMode === 'history' ? <HistoryView commits={history} loading={historyLoading} error={historyError} documentPath={selectedDocument.path} documentHref={documentHref} diffPath={diffPath} currentRef={currentVersion} sourceKind={sourceKind} /> : viewMode === 'diff' ? <DiffView diff={diff} loading={diffLoading} error={diffViewError} historyPath={historyPath} /> : contentLoading ? <div className="document-skeleton"><div /><div /><div /><div /></div> : contentError ? <div className="inline-error">{contentError}</div> : !parsed ? <div className="document-skeleton"><div /><div /><div /><div /></div> : <><div className="document-meta"><span>{selectedDocument.path}</span>{activeRef && <span className="ref-badge">{activeRef.slice(0, 12)}</span>}<span className="document-actions"><Link to={historyPath}>History</Link></span></div><article className="markdown-body"><h1>{parsed.title}</h1><ReactMarkdown remarkPlugins={[remarkGfm]} components={{ h1: () => null, a: ({ href, children, ...props }) => <a href={href} {...props} target={href?.startsWith('http') ? '_blank' : undefined} rel={href?.startsWith('http') ? 'noreferrer' : undefined}>{children}</a>, img: ({ src, alt, ...props }) => provider ? <MarkdownImage src={src} alt={alt} provider={provider} owner={owner} repository={repository} documentPath={selectedDocument.path} assetRef={activeRef} {...props} /> : null, code: ({ className, children, node, ...props }) => { const language = className?.replace('language-', ''); const rendererName = language === 'yaml' ? rendererNameFromMeta(readCodeMeta(node)) : undefined; if (rendererName) return <YamlRendererBlock name={rendererName} source={String(children).trim()} registry={rendererRegistry} context={{ documentPath: selectedDocument.path, repository, ref: activeRef, scope }} />; return <code className={`${className || ''} code-inline`} data-language={language} {...props}>{children}</code>; } }}>{parsed.content}</ReactMarkdown></article></>;
+  return <div className="docs-shell"><Topbar owner={owner} repository={repository} ref={ref} defaultRef={defaultRef} scope={scope} source={sourceKind} refs={refs} onRefChange={changeRef} onOpenLocal={openLocalFolder} onMenu={() => setSidebarOpen(true)} /><div className={`docs-layout ${sidebarOpen ? 'sidebar-visible' : ''}`}><div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} /><Sidebar tree={tree} activePath={activePath} onNavigate={openDocument} /><main className="docs-main"><div className="document-wrap">{viewContent}{viewMode === 'document' && !contentLoading && !contentError && parsed && <div className="document-footer"><span>Powered by Git MD Viewer</span><span className="footer-note">{sourceKind === 'local' ? 'Local folder · read-only' : `${sourceKind} · ${scope}`}</span></div>}</div></main></div></div>;
 }
 
 function Topbar({ owner, repository, ref, defaultRef, scope, source, refs, onRefChange, onOpenLocal, onMenu }: { owner: string; repository: string; ref?: string; defaultRef?: string; scope?: string; source: SourceKind; refs: RepositoryRef[]; onRefChange: (value: string) => void; onOpenLocal: (files: LocalFolderSelection[]) => void; onMenu: () => void }) {

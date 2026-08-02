@@ -54,15 +54,14 @@ Bitbucket Cloud 的文档空间使用 `source=bitbucket`，其中 `<owner>` 对�
 - [ ] GitHub/Bitbucket 文档页显示 `History` 入口，正文不显示 `Diff` 按钮。
 - [ ] `.../guide/install.md/history?scope=tests%2Ffixtures%2Fdocs` 能显示文件 Commit 历史；每条历史包含作者、日期和短 SHA。
 - [ ] 历史列表中的“查看该历史版本”会切换到该 Commit 的文档内容，不跳转到 GitHub/Bitbucket 原生网站。
+- [ ] 切换到历史版本后，顶栏 VERSION 显示该 Commit 的短 SHA，刷新后仍能恢复该版本内容。
 - [ ] 历史列表中的“与当前版本比较”会以当前查看版本为目标打开 Diff 页面，并显示 from/to SHA 与 unified patch。
 - [ ] 直接打开 Diff 但缺少 `from` 或 `to` 时显示明确的参数提示，不发起无效请求。
+- [ ] 两个版本没有该文件 patch 时显示“没有可显示的文件差异”，而不是把提示文本当作代码差异。
 - [ ] 本地文件夹打开 History 时显示本地模式不包含 Git 历史的提示。
 
 Phase 2 的代码级验证已通过：`tsc -b` 与 `vite build`。上面的 Provider 访问项需要在浏览器中
 使用公开仓库或本地文件夹完成验收后再勾选。
-
-Phase 3 第一批的代码级验证已通过：`tsc -b` 与 `vite build`。YAML 渲染器和独立宿主入口还需要
-按上面的测试夹具完成浏览器手动验收。
 
 Phase 3 第一批的代码级验证已通过：`tsc -b` 与 `vite build`。YAML 渲染器和独立宿主入口还需要
 按上面的测试夹具完成浏览器手动验收。

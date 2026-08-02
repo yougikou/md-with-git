@@ -97,6 +97,7 @@ export class BitbucketProvider implements RepositoryProvider {
   async compare(input: CompareQuery): Promise<DiffResult> {
     const response = await fetch(`${this.repo(input)}/diff/${encodeURIComponent(input.to)}?from=${encodeURIComponent(input.from)}`, { headers: { Accept: 'text/plain' } });
     if (!response.ok) throw new Error(`Bitbucket 版本比较失败（${response.status}）。`);
-    return { from: input.from, to: input.to, path: input.path, patch: await response.text() };
+    const patch = await response.text();
+    return { from: input.from, to: input.to, path: input.path, patch, message: patch.trim() ? undefined : '这两个版本之间没有可显示的差异。' };
   }
 }

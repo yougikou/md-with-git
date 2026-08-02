@@ -84,6 +84,6 @@ export class GitHubProvider implements RepositoryProvider {
   async compare(input: CompareQuery): Promise<DiffResult> {
     const data = await this.request<{ files?: Array<{ filename: string; patch?: string }> }>(`${this.repo(input)}/compare/${encodeURIComponent(input.from)}...${encodeURIComponent(input.to)}`);
     const file = data.files?.find((item) => item.filename === input.path);
-    return { from: input.from, to: input.to, path: input.path, patch: file?.patch || '该文件在此版本比较中没有可显示的文本差异。' };
+    return { from: input.from, to: input.to, path: input.path, patch: file?.patch || '', message: file ? '该文件在此版本比较中没有可显示的文本差异。' : '该文件没有出现在这两个版本的比较结果中，可能是新增、删除或路径不匹配。' };
   }
 }

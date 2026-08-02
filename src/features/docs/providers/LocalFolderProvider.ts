@@ -88,7 +88,7 @@ export class LocalFolderProvider implements RepositoryProvider {
   }
 
   async compare(input: CompareQuery): Promise<DiffResult> {
-    return { from: input.from, to: input.to, path: input.path, patch: '本地文件夹没有 Git 版本历史。' };
+    return { from: input.from, to: input.to, path: input.path, patch: '', message: '本地文件夹没有 Git 版本历史。' };
   }
 }
 

@@ -41,6 +41,7 @@ export interface DiffResult {
   to: string;
   path: string;
   patch: string;
+  message?: string;
 }
 
 export interface RepositoryRef {
