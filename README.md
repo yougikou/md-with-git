@@ -18,6 +18,8 @@ pnpm dev
 
 `scope` 是要渲染的文档目录。Viewer 不把整个 Git 仓库作为浏览目标；Git 仓库只负责提供文档文件、资源和版本数据。
 
+首页的“打开 Git 仓库中的文档目录”表单支持填写 GitHub/Bitbucket、仓库和文档目录；在本地文档页顶栏也可以点击“打开 Git 仓库”进行切换。
+
 ## 当前能力
 
 - React Router 的 `/docs/*` 路由级动态导入
