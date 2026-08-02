@@ -76,7 +76,7 @@ function LocalGitRepositorySetup() {
     navigate(`/docs/local/git?${query.toString()}`);
   };
 
-  return <section className="local-git-form-card"><div className="repository-form-heading"><div><span className="eyebrow">OPEN A LOCAL GIT DOC SPACE</span><h2>设置本地 Git 仓库</h2></div><span className="form-hint">项目根目录与文档目录分开配置</span></div><form onSubmit={openLocalGitRepository}><div className="local-git-form-grid"><div><span className="local-git-label">Git 项目文件夹</span><LocalFolderPicker label="选择包含 .git 的项目文件夹" onSelect={(files) => { setSelection(files); setError(''); }} /><p className="local-git-selection">{selection.length ? `已选择项目文件夹，读取 ${selection.length} 个只读条目` : '需要选择 .git 所在的项目根目录'}</p></div><label><span>文档目录 scope（相对项目根目录）</span><input value={scope} onChange={(event) => setScope(event.target.value)} placeholder="例如 docs/guide" required /></label><button className="button button-primary" type="submit">打开本地 Git 文档 <span>→</span></button></div>{error && <p className="local-git-error">{error}</p>}<Link className="local-git-cancel" to="/">返回普通本地文档或远程仓库设置</Link></form></section>;
+  return <section className="local-git-form-card"><div className="repository-form-heading"><div><span className="eyebrow">OPEN A LOCAL GIT DOC SPACE</span><h2>设置本地 Git 仓库</h2></div><span className="form-hint">项目根目录与文档目录分开配置</span></div><form onSubmit={openLocalGitRepository}><div className="local-git-form-grid"><div><span className="local-git-label">Git 项目文件夹</span><LocalFolderPicker label="选择包含 .git 的项目文件夹" onSelect={(files) => { setSelection(files); setError(''); }} /><p className="local-git-selection">{selection.length ? `已选择项目文件夹，读取 ${selection.length} 个只读条目` : '需要选择 .git 所在的项目根目录'}</p></div><label><span>文档目录 scope（相对项目根目录）</span><input value={scope} onChange={(event) => setScope(event.target.value)} placeholder="例如 docs/guide" required /></label><button className="button button-primary" type="submit">打开本地 Git 文档 <span>→</span></button></div>{error && <p className="local-git-error">{error}</p>}<Link className="local-git-cancel" to="/?mode=repository">设置在线 Git 仓库</Link></form></section>;
 }
 
 function HomePage() {
@@ -103,6 +103,7 @@ function HomePage() {
           <Link className="button button-primary" to="/docs/vitejs/vite/docs/guide?scope=docs%2Fguide">打开示例文档 <span>↗</span></Link>
           <LocalFolderPicker onSelect={openLocalFolder} />
           <Link className="button button-quiet" to="/?mode=local-git">设置本地 Git 仓库 <span>↗</span></Link>
+          <Link className="button button-quiet" to="/?mode=repository">设置在线 Git 仓库 <span>↗</span></Link>
         </div>
         <div className="local-mode-note"><span className="eyebrow">LOCAL MODE</span><span>普通本地文档只选择文档文件夹；本地 Git 文档需另外选择 .git 所在项目根目录并指定 scope。</span></div>
         <div className="feature-strip">

@@ -48,6 +48,7 @@ Bitbucket Cloud 的文档空间使用 `source=bitbucket`，其中 `<owner>` 对�
 - [ ] 使用原生目录选择器选择只包含一个 Markdown 文件的目录时，该文件仍能被发现和打开。
 - [ ] 使用原生文件夹选择器后刷新页面，本地文档空间可以恢复；恢复内容仍是只读句柄，不是文件副本。
 - [ ] “本地文档”与“设置本地 Git 仓库”是两个独立入口；本地 Git 设置要求分别选择项目根目录和填写 `scope`。
+- [ ] 首页和文档页都能进入“设置在线 Git 仓库”，在线 Git 表单仍支持 GitHub/Bitbucket、Repository、文档目录和 Branch/Tag。
 - [ ] 本地 Git 设置页面拒绝不包含 `.git/HEAD` 的目录，并明确提示重新选择 Git 项目根目录。
 - [ ] 本地 Git 文档页只显示配置的 `scope`，Sidebar 不显示项目根目录下的其它 Markdown。
 - [ ] Bitbucket URL 使用 `source=bitbucket` 后能读取公开仓库文档空间。

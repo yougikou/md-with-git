@@ -15,7 +15,7 @@ button { font: inherit; }
 .hero h1 { max-width: 840px; margin: 22px 0 25px; font: 600 clamp(44px, 7vw, 86px)/1.07 'Noto Serif SC', serif; letter-spacing: -.065em; }
 .hero h1 em { display: block; color: #ee5b39; font-style: normal; }
 .hero-copy { max-width: 520px; margin: 0; color: #687384; font-size: 18px; line-height: 1.8; }
-.hero-actions { display: flex; gap: 12px; margin-top: 38px; }
+.hero-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 38px; }
 .button { display: inline-flex; gap: 17px; align-items: center; width: fit-content; padding: 13px 17px; border: 0; border-radius: 9px; font-size: 14px; font-weight: 600; cursor: pointer; transition: transform .2s, box-shadow .2s; }
 .button:hover { transform: translateY(-2px); }
 .button-primary { color: white; background: #18202b; box-shadow: 0 9px 20px #18202b22; }

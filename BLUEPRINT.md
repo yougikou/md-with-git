@@ -369,7 +369,7 @@ LocalFolderProvider
 实现说明：
 
 - Bitbucket Cloud 通过 `source=bitbucket` 选择，`owner` 对应 workspace，`repository` 对应 repo slug。
-- 首页提供 GitHub/Bitbucket、仓库、文档目录和可选版本的配置表单；文档页顶栏可随时切换到该表单。
+- 首页保留独立的“设置在线 Git 仓库”入口，支持 GitHub/Bitbucket、仓库、文档目录和可选版本；文档页顶栏也可切换到该表单。
 - 普通本地文档通过首页或文档页顶栏的“本地文档”入口载入，文件只在浏览器内读取，不上传到服务器；支持的浏览器
   优先使用 File System Access API，不支持时回退到 `webkitdirectory`，拖拽入口留作增强。
 - 本地 Git 仓库使用独立的“设置本地 Git 仓库”入口：用户先选择 `.git` 所在的项目根目录，再填写相对项目根目录的
