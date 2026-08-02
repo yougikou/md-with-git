@@ -17,6 +17,16 @@ function decode(bytes: Uint8Array): string {
   return new TextDecoder().decode(bytes);
 }
 
+function oidFromBytes(bytes: Uint8Array): string {
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+interface GitTreeEntry {
+  mode: string;
+  path: string;
+  oid: string;
+}
+
 function lineList(value: string): string[] {
   return value.replace(/\r\n/g, '\n').split('\n');
 }
@@ -88,6 +98,50 @@ export class LocalGitRepository {
     return oid;
   }
 
+  private async readObject(oid: string): Promise<{ type: string; object: Uint8Array }> {
+    const result = await git.readObject({ ...this.options(), oid, format: 'content' });
+    return { type: result.type, object: new Uint8Array(result.object as Uint8Array) };
+  }
+
+  private async treeOidForRef(ref: string): Promise<string> {
+    let oid = await this.resolve(ref);
+    for (let depth = 0; depth < 8; depth += 1) {
+      const { type, object } = await this.readObject(oid);
+      if (type === 'tree') return oid;
+      const source = decode(object);
+      if (type === 'tag') {
+        const target = source.match(/^object ([0-9a-f]{40})$/m)?.[1];
+        if (!target) throw new Error(`无法解析本地 Git Tag 对象：${oid}`);
+        oid = target;
+        continue;
+      }
+      if (type === 'commit') {
+        const tree = source.match(/^tree ([0-9a-f]{40})$/m)?.[1];
+        if (!tree) throw new Error(`无法解析本地 Git Commit 的 tree：${oid}`);
+        return tree;
+      }
+      throw new Error(`本地 Git 引用 ${ref} 未指向 Commit 或 Tree。`);
+    }
+    throw new Error(`本地 Git Tag 引用层级过深：${ref}`);
+  }
+
+  private async readTreeEntries(oid: string): Promise<GitTreeEntry[]> {
+    const { type, object } = await this.readObject(oid);
+    if (type !== 'tree') throw new Error(`本地 Git 对象不是 Tree：${oid}`);
+    const entries: GitTreeEntry[] = [];
+    let offset = 0;
+    while (offset < object.length) {
+      const modeEnd = object.indexOf(0x20, offset);
+      const pathEnd = object.indexOf(0, modeEnd + 1);
+      const oidStart = pathEnd + 1;
+      const oidEnd = oidStart + 20;
+      if (modeEnd < 0 || pathEnd < 0 || oidEnd > object.length) throw new Error(`无法解析本地 Git Tree：${oid}`);
+      entries.push({ mode: decode(object.slice(offset, modeEnd)), path: decode(object.slice(modeEnd + 1, pathEnd)), oid: oidFromBytes(object.slice(oidStart, oidEnd)) });
+      offset = oidEnd;
+    }
+    return entries;
+  }
+
   async getRefs(): Promise<RepositoryRef[]> {
     const options = this.options();
     const branchNames = await git.listBranches(options);
@@ -103,14 +157,34 @@ export class LocalGitRepository {
   }
 
   async listFiles(ref?: string): Promise<string[]> {
-    const oid = await this.resolve(ref || 'HEAD');
-    return git.listFiles({ ...this.options(), ref: oid });
+    const files: string[] = [];
+    const visit = async (treeOid: string, prefix = ''): Promise<void> => {
+      const entries = await this.readTreeEntries(treeOid);
+      for (const entry of entries) {
+        const path = prefix ? `${prefix}/${entry.path}` : entry.path;
+        if (entry.mode === '40000') await visit(entry.oid, path);
+        else files.push(path);
+      }
+    };
+    await visit(await this.treeOidForRef(ref || 'HEAD'));
+    return files;
   }
 
   async readFile(path: string, ref?: string): Promise<Uint8Array> {
-    const oid = await this.resolve(ref || 'HEAD');
-    const result = await git.readBlob({ ...this.options(), oid, filepath: normalize(path) });
-    return result.blob;
+    const parts = normalize(path).split('/').filter(Boolean);
+    let treeOid = await this.treeOidForRef(ref || 'HEAD');
+    for (let index = 0; index < parts.length; index += 1) {
+      const entry = (await this.readTreeEntries(treeOid)).find((candidate) => candidate.path === parts[index]);
+      if (!entry) throw new Error(`本地 Git 文件不存在：${normalize(path)}`);
+      if (index === parts.length - 1) {
+        const { type, object } = await this.readObject(entry.oid);
+        if (type !== 'blob') throw new Error(`本地 Git 路径不是文件：${normalize(path)}`);
+        return object;
+      }
+      if (entry.mode !== '40000') throw new Error(`本地 Git 路径不是目录：${parts.slice(0, index + 1).join('/')}`);
+      treeOid = entry.oid;
+    }
+    throw new Error(`本地 Git 文件不存在：${normalize(path)}`);
   }
 
   async log(path: string, ref?: string, limit = 20) {

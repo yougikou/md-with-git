@@ -52,6 +52,7 @@ Bitbucket Cloud 的文档空间使用 `source=bitbucket`，其中 `<owner>` 对�
 - [ ] 本地 Git 设置页面拒绝不包含 `.git/HEAD` 的目录，并明确提示重新选择 Git 项目根目录。
 - [ ] 本地 Git 文档页只显示配置的 `scope`，Sidebar 不显示项目根目录下的其它 Markdown。
 - [ ] 本地 Git 适配器能读取 HEAD、分支和 scope 内 Markdown；例如选择项目根目录后使用 `tests/fixtures/docs` 作为 scope。
+- [ ] 本地 Git 对象位于 `.git/objects/pack` 时，仍能枚举 scope 内的 Markdown 并打开首个文档。
 - [ ] Bitbucket URL 使用 `source=bitbucket` 后能读取公开仓库文档空间。
 - [ ] VERSION 选择器能切换 GitHub/Bitbucket 的 branch 或 tag。
 - [ ] 本地文档空间不显示 Git VERSION 选择器或版本徽标。
