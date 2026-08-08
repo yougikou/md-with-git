@@ -43,7 +43,7 @@ export function PwaControls() {
     const onOnline = () => setOnline(true);
     const onOffline = () => setOnline(false);
 
-    navigator.serviceWorker.register(`/sw.js?version=${__PWA_BUILD_ID__}`, { updateViaCache: 'none' }).then((registration) => {
+    navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js?version=${__PWA_BUILD_ID__}`, { updateViaCache: 'none' }).then((registration) => {
       if (registration.waiting) setUpdateWorker(registration.waiting);
       navigator.serviceWorker.ready.then(cacheCurrentAppResources);
       registration.addEventListener('updatefound', () => {

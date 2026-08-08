@@ -1,6 +1,8 @@
 /* Git MD Viewer application-shell service worker. */
 const CACHE_VERSION = `git-md-viewer-shell-${new URL(self.location.href).searchParams.get('version') || 'dev'}`;
-const APP_SHELL = ['/', '/index.html', '/manifest.webmanifest', '/icons/git-md-viewer.svg', '/icons/git-md-viewer-192.png', '/icons/git-md-viewer-512.png'];
+const APP_BASE_URL = self.registration.scope;
+const appUrl = (path = '') => new URL(path, APP_BASE_URL).href;
+const APP_SHELL = ['', 'index.html', 'manifest.webmanifest', 'icons/git-md-viewer.svg', 'icons/git-md-viewer-192.png', 'icons/git-md-viewer-512.png'].map(appUrl);
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE_VERSION).then((cache) => cache.addAll(APP_SHELL)));
@@ -32,11 +34,11 @@ async function networkFirstNavigation(request) {
     const response = await fetch(request);
     if (cacheable(response)) {
       cache.put(request, response.clone());
-      cache.put('/index.html', response.clone());
+      cache.put(appUrl('index.html'), response.clone());
     }
     return response;
   } catch {
-    return (await cache.match(request)) || (await cache.match('/index.html')) || (await cache.match('/'));
+    return (await cache.match(request)) || (await cache.match(appUrl('index.html'))) || (await cache.match(appUrl()));
   }
 }
 

@@ -19,6 +19,7 @@ import './styles.css';
 import 'katex/dist/katex.min.css';
 
 const DocsPage = lazy(() => import('./features/docs/DocsPage'));
+const routerBaseName = import.meta.env.BASE_URL.replace(/\/$/, '') || '/';
 
 function Loading() {
   const { t } = useI18n();
@@ -276,7 +277,7 @@ function App() {
   );
   return (
     <I18nProvider><DocsRendererProvider registry={rendererRegistry}>
-      <BrowserRouter>
+      <BrowserRouter basename={routerBaseName}>
         <PwaControls />
         <Suspense fallback={<Loading />}>
           <Routes>
