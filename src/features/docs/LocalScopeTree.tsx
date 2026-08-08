@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { LocalDirectoryHandle, LocalFolderSelection } from './LocalFolderPicker';
 import { readDirectoryLevel } from './LocalFolderPicker';
+import { useI18n } from '../../i18n';
 
 interface ScopeNode {
   path: string;
@@ -66,11 +67,13 @@ function nativeNodes(directories: LocalDirectoryHandle[]): ScopeNode[] {
 }
 
 function ScopeBranch({ node, value, onChange, onToggle }: { node: ScopeNode; value: string; onChange: (path: string) => void; onToggle: (node: ScopeNode) => void }) {
+  const { t } = useI18n();
   const selected = value === node.path;
-  return <li><button type="button" className={`scope-tree-option ${selected ? 'selected' : ''}`} onClick={() => { onChange(node.path); onToggle(node); }} disabled={node.loading} aria-busy={node.loading} aria-pressed={selected} title={`选择 ${node.path}（仅限单选）`}><span className="scope-tree-toggle">{node.loading ? '…' : node.expanded ? '⌄' : '›'}</span><span className="scope-tree-name">{node.name}</span>{node.loading && <span className="scope-tree-loading">正在读取…</span>}</button>{node.expanded && node.children.length > 0 && <ul>{node.children.map((child) => <ScopeBranch key={child.path} node={child} value={value} onChange={onChange} onToggle={onToggle} />)}</ul>}</li>;
+  return <li><button type="button" className={`scope-tree-option ${selected ? 'selected' : ''}`} onClick={() => { onChange(node.path); onToggle(node); }} disabled={node.loading} aria-busy={node.loading} aria-pressed={selected} title={t('selectDirectoryTitle', { path: node.path })}><span className="scope-tree-toggle">{node.loading ? '…' : node.expanded ? '⌄' : '›'}</span><span className="scope-tree-name">{node.name}</span>{node.loading && <span className="scope-tree-loading">{t('directoryLoading')}</span>}</button>{node.expanded && node.children.length > 0 && <ul>{node.children.map((child) => <ScopeBranch key={child.path} node={child} value={value} onChange={onChange} onToggle={onToggle} />)}</ul>}</li>;
 }
 
 export function LocalScopeTree({ files, directories, value, onChange }: { files: LocalFolderSelection[]; directories?: LocalDirectoryHandle[]; value: string; onChange: (path: string) => void }) {
+  const { t } = useI18n();
   const fallbackNodes = useMemo(() => buildScopeTree(files), [files]);
   const [nativeTree, setNativeTree] = useState<ScopeNode[]>(() => nativeNodes(directories || []));
   const usesLazyTree = Array.isArray(directories);
@@ -94,5 +97,5 @@ export function LocalScopeTree({ files, directories, value, onChange }: { files:
     }
   };
 
-  return <div className="scope-tree" aria-label="选择一个文档目录（仅限单选）"><p className="scope-tree-instruction">请选择一个文档目录（仅限单选）</p>{nodes.length > 0 ? <ul>{nodes.map((node) => <ScopeBranch key={node.path} node={node} value={value} onChange={onChange} onToggle={toggleNode} />)}</ul> : <p className="scope-tree-empty">选择项目根目录后，这里会显示可选目录。</p>}</div>;
+  return <div className="scope-tree" aria-label={t('selectOneDirectory')}><p className="scope-tree-instruction">{t('selectOneDirectory')}</p>{nodes.length > 0 ? <ul>{nodes.map((node) => <ScopeBranch key={node.path} node={node} value={value} onChange={onChange} onToggle={toggleNode} />)}</ul> : <p className="scope-tree-empty">{t('directoryEmpty')}</p>}</div>;
 }

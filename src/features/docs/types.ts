@@ -66,6 +66,7 @@ export interface DocumentNode {
   path: string;
   title: string;
   isIndex?: boolean;
+  size?: number;
 }
 
 export interface SectionNode {

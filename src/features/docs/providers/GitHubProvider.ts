@@ -1,6 +1,7 @@
 import type {
   AssetQuery, Commit, CompareQuery, DiffResult, FileQuery, HistoryQuery, RepositoryEntry, RepositoryProvider, RepositoryRef, TreeQuery,
 } from '../types';
+import { getAccessToken } from '../accessTokens';
 
 interface GitHubContent {
   type: string;
@@ -26,11 +27,17 @@ export class GitHubProvider implements RepositoryProvider {
   readonly kind = 'github' as const;
   private readonly apiBase = 'https://api.github.com';
 
+  private headers(accept: string): HeadersInit {
+    const token = getAccessToken('github');
+    return { Accept: accept, ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+  }
+
   private async request<T>(url: string): Promise<T> {
-    const response = await fetch(url, { headers: { Accept: 'application/vnd.github+json' } });
+    const response = await fetch(url, { headers: this.headers('application/vnd.github+json') });
     if (!response.ok) {
-      if (response.status === 403) throw new Error('GitHub API 请求频率已达到限制，请稍后再试。');
-      if (response.status === 404) throw new Error('仓库、版本或文件不存在，或者当前仓库不是公开仓库。');
+      if (response.status === 401) throw new Error('GitHub 访问令牌无效或已过期。请在设置页重新填写令牌。');
+      if (response.status === 403) throw new Error('GitHub 拒绝了请求：令牌权限不足，或 API 请求频率已达到限制。');
+      if (response.status === 404) throw new Error('仓库、版本或文件不存在；私有仓库请确认令牌已获授权。');
       throw new Error(`GitHub API 请求失败（${response.status}）。`);
     }
     return response.json() as Promise<T>;
@@ -70,8 +77,11 @@ export class GitHubProvider implements RepositoryProvider {
     return new TextDecoder().decode(bytes);
   }
 
-  getAssetUrl(input: AssetQuery): string {
-    return `https://raw.githubusercontent.com/${encodeURIComponent(input.owner)}/${encodeURIComponent(input.repository)}/${encodeURIComponent(input.ref || 'HEAD')}/${input.path.split('/').map(encodeURIComponent).join('/')}`;
+  async getAssetUrl(input: AssetQuery): Promise<string> {
+    const query = input.ref ? `?ref=${encodeURIComponent(input.ref)}` : '';
+    const response = await fetch(`${this.repo(input)}/contents/${input.path.split('/').map(encodeURIComponent).join('/')}${query}`, { headers: this.headers('application/vnd.github.raw') });
+    if (!response.ok) throw new Error(`GitHub 资源读取失败（${response.status}）。`);
+    return URL.createObjectURL(await response.blob());
   }
 
   async getFileHistory(input: HistoryQuery): Promise<Commit[]> {

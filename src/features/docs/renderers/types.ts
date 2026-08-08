@@ -14,7 +14,18 @@ export interface YamlBlockRendererProps {
 
 export type YamlBlockRenderer = ComponentType<YamlBlockRendererProps>;
 
+export interface CodeBlockRendererProps {
+  source: string;
+  language: string;
+  meta: string;
+  context: YamlBlockContext;
+}
+
+export type CodeBlockRenderer = ComponentType<CodeBlockRendererProps>;
+
 export interface DocsRendererRegistry {
   getYamlRenderer(name: string): YamlBlockRenderer | undefined;
   registerYamlRenderer(name: string, renderer: YamlBlockRenderer): () => void;
+  getCodeBlockRenderer(language: string): CodeBlockRenderer | undefined;
+  registerCodeBlockRenderer(language: string, renderer: CodeBlockRenderer): () => void;
 }

@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
+import { useI18n } from '../../i18n';
 
 export interface LocalFolderFile {
   file: File;
@@ -74,6 +75,7 @@ export async function collectDirectoryFiles(handle: FileSystemDirectoryHandle, p
 }
 
 export function LocalFolderPicker({ onSelect, compact = false, label, compactLabel }: { onSelect: (files: LocalFolderSelection[], selectedPath?: string, details?: { rootDirectory?: FileSystemDirectoryHandle; directories?: LocalDirectoryHandle[] }) => void; compact?: boolean; label?: string; compactLabel?: string }) {
+  const { t } = useI18n();
   const inputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(false);
 
@@ -105,6 +107,6 @@ export function LocalFolderPicker({ onSelect, compact = false, label, compactLab
     inputRef.current?.click();
   };
 
-  const buttonLabel = loading ? '正在读取目录…' : compact ? compactLabel || '本地文档' : label || '选择本地文档文件夹';
+  const buttonLabel = loading ? t('directoryLoading') : compact ? compactLabel || t('localDocuments') : label || t('selectFolder');
   return <><button type="button" className={`local-folder-picker ${compact ? 'compact' : ''}`} onClick={chooseFolder} disabled={loading}>{buttonLabel}</button><input ref={inputRef} className="local-folder-input" type="file" multiple {...{ webkitdirectory: '', directory: '' }} onChange={handleChange} /></>;
 }

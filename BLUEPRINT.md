@@ -4,10 +4,10 @@
 
 一个基于 React 的前端 Markdown 文档 Viewer，主要用于浏览 GitHub、Bitbucket 等 Git 仓库中的文档，并支持：
 
-- 自动发现 Markdown / MDX 文件
+- 自动发现 Markdown 文件
 - 自动生成多级 Sidebar
 - 浏览器路径路由
-- 外部源码引用
+- 多文档源工作区与 Sidebar 来源切换
 - React Application / Demo 嵌入
 - Git 版本历史
 - Markdown 版本差异对比
@@ -129,7 +129,6 @@ BitbucketProvider
 LocalFolderProvider
 ```
 
-未来可扩展 GitLab、Gitea、企业内部 Git 服务。
 
 ## 5. 自动生成 Sidebar
 
@@ -189,7 +188,7 @@ Markdown 第一个 H1
   ↓
 调用 Git Provider 获取文件树
   ↓
-过滤 Markdown / MDX 文件
+过滤 Markdown 文件
   ↓
 前端构建文档树
   ↓
@@ -228,51 +227,51 @@ React Renderer
 
 计划支持：
 
-- GFM
-- 表格和任务列表
-- Mermaid
-- 数学公式
+- [x] GFM
+- [x] 表格和任务列表
+- [x] Mermaid（严格安全模式、按需加载）
+- [x] 数学公式（KaTeX，行内与块级）
 - Callout
 - Tabs
 - 自定义容器
-- 外部源码引用
 - React Demo
-- 代码高亮、复制、行号和高亮行
 
-建议技术：`remark`、`rehype`、`react-markdown` 或 `unified`、`Shiki`、`DOMPurify`。
+建议技术：`remark`、`rehype`、`react-markdown` 或 `unified`、`DOMPurify`。
 
-## 8. 外部代码块
+## 8. 多文档源工作区与切换器
 
-支持类似语法：
+“多数据源 Provider”与“一个工作区同时配置多个文档源”是两层能力：Phase 2 已支持不同 Provider
+类型；Phase 3 将允许用户把多个本地文件夹、多个本地 Git 仓库、多个在线 Git 仓库混合加入同一
+工作区。每个源独立保存 Provider 类型、仓库标识、文档 scope、版本和本地授权句柄。
 
-````md
-```tsx file=src/components/Button.tsx lines=10-40
-```
-````
+建议数据模型：
 
-或：
-
-```md
-:::code
-file: src/components/Button.tsx
-language: tsx
-lines: 10-40
-:::
-```
-
-代码文件必须根据当前 Git Commit 加载，保证文档与源码版本一致。
-
-## 9. React 应用嵌入
-
-根据安全和复杂度支持三种模式：
-
-```text
-受控组件       → React Island
-完整 React App  → iframe
-用户代码        → 沙箱环境
+```ts
+interface WorkspaceSource {
+  id: string;
+  label: string;
+  kind: 'github' | 'bitbucket' | 'local-folder' | 'local-git';
+  owner?: string;
+  repository?: string;
+  scope?: string;
+  ref?: string;
+  localId?: string;
+}
 ```
 
-不直接执行来自远程仓库的任意脚本。第一版优先实现 iframe 和受控 React Demo。
+文档浏览界面的 Sidebar 顶部加入来源切换菜单。切换来源时替换当前目录树和文档内容，但保留每个
+来源各自最后打开的文档、版本、Sidebar 展开状态和搜索索引。第一批搜索仍限定当前激活来源，不在
+后台同时索引所有来源。
+
+设置界面负责添加、移除、重命名和排序来源；在线来源的元数据保存在 localStorage，本地目录句柄
+继续保存在 IndexedDB。浏览器权限失效时只要求重新授权对应的本地来源，不影响工作区中的其它来源。
+路由必须包含稳定的 `sourceId`，避免不同仓库中同路径文档发生冲突。
+
+## 9. 交互示例嵌入
+
+不直接执行来自远程仓库的任意脚本。iframe Demo 只运行自包含的示例，使用无
+`allow-same-origin` 的 sandbox、独立 CSP、默认禁网和显式重新运行/停止控制。运行能力由 Viewer
+内置，不要求文档使用者安装工具或配置本地运行环境。
 
 ## 10. Git 版本功能
 
@@ -301,7 +300,7 @@ lines: 10-40
 - Branch / Tag / Commit 切换
 - 文件历史
 - 两个版本比较
-- Unified Diff / Split Diff
+- Split Diff（解析 Provider 返回的 unified patch 后左右对齐展示）
 - 新增、修改、删除、重命名识别
 - 忽略空格
 - 变更行统计
@@ -322,7 +321,6 @@ lines: 10-40
 React Router 解析路径
 ```
 
-如果企业 Git 服务不允许跨域访问，则需要浏览器扩展、桌面端辅助或代理服务；这属于部署约束，不改变核心 Viewer 架构。
 
 ## 12. 本地文件模式
 
@@ -389,16 +387,16 @@ LocalFolderProvider
 
 进入条件：Phase 1 的 GitHub 公共仓库手动验收通过，并完成 `tests/` 中的测试夹具检查。
 
-### Phase 3：源码与组件
+### Phase 3：多源与交互组件
 
-- [ ] 外部代码块
-- 行号和高亮
-- 文件 Tab
+- [x] 多文档源工作区（混合多个本地文件夹与 Git 仓库）
+- [x] Sidebar 顶部来源切换菜单
+- [x] 来源增删、重命名、排序与持久化恢复
+- [x] 每个来源独立保存路由、版本、目录状态和搜索索引
 - [x] YAML 代码块渲染器注册接口
 - [x] 用户自定义 YAML 数据类型与 React 渲染组件
 - [x] 独立使用模式的简易宿主与 `src/docs-renderers.tsx` 配置示例
-- React Island
-- iframe Demo
+- [x] iframe Demo
 
 #### Phase 3 的 YAML 代码块扩展协议
 
@@ -478,20 +476,17 @@ YAML fenced code block
 
 - [x] Commit 历史
 - [x] 指定版本浏览
-- 文件历史
-- [x] Unified Diff
-- Split Diff
-- 变更文件列表
+- [x] 文件历史
+- [x] Unified Diff 数据解析
+- [x] Split Diff 界面（宽屏、仅显示变更行、可忽略空格 / Tab / 空行）
 
 ### Phase 5：高级能力
 
 - 私有仓库 OAuth
-- 搜索
-- Mermaid
-- MDX
-- 结构化文档 Diff
-- 插件系统
-- GitLab / Gitea / 企业 Git 支持
+- [x] 搜索（当前 scope 的前端全文检索）
+- [x] Mermaid（严格安全模式、按需加载）
+- [x] 结构化文档 Diff 第一批（Markdown block 级）
+- [x] 插件系统第一批（fenced-code / YAML 渲染器注册表、KaTeX）
 
 ## 14. 推荐技术栈
 
@@ -502,7 +497,6 @@ Vite
 React Router
 remark / rehype
 react-markdown 或 unified
-Shiki
 DOMPurify
 IndexedDB
 Web Worker
@@ -526,7 +520,7 @@ React Demo 默认隔离运行
 
 ## 16. 当前进度与测试策略
 
-截至 2026-08-02：
+截至 2026-08-08：
 
 ```text
 Phase 1 核心 Viewer       已实现
@@ -536,6 +530,10 @@ GitHub 真实仓库验收        待使用公开仓库路径手动确认
 本地 Git 浏览器端回归      已通过：真实含 pack 对象的仓库，refs、文档树与 scope 内 Markdown 均可读取
 Phase 2 多数据源           已实现，待 Bitbucket/本地公开手动验收
 Phase 3 YAML 渲染器第一批   已实现，待使用 fixtures 浏览器手动验收
+Phase 3 多文档源与交互组件   已实现：来源工作区、状态恢复、隔离 iframe Demo
+Phase 4 文件历史与 Diff     已实现：历史版本浏览、Split Diff、Markdown block 级结构化对比
+Phase 5 自适应全文搜索      已实现：Worker、设备分档、降级、版本隔离缓存、实时预览
+Phase 5 零配置插件第一批    已实现：Mermaid、KaTeX、fenced-code/YAML 渲染器注册表
 ```
 
 仓库内的 `tests/` 是可直接推送到 GitHub 的手动测试夹具，不依赖后端或私有数据。推送后，
@@ -551,13 +549,20 @@ Phase 3 YAML 渲染器第一批   已实现，待使用 fixtures 浏览器手动
 Phase 2 的来源与版本测试入口见 `tests/README.md`，包括 GitHub、Bitbucket、本地文件夹、相对
 资源和 Branch/Tag 切换。
 
-Phase 3 第一批实现位置：`src/features/docs/renderers/` 只提供 registry、宿主上下文和 YAML
-解析协议；`examples/standalone-host/src/docs-renderers.tsx` 提供 `change-history` 示例渲染器。
+Phase 3 第一批实现位置：`src/features/docs/renderers/` 提供 registry、宿主上下文、YAML 数据渲染器与
+fenced-code 渲染器协议；`examples/standalone-host/src/docs-renderers.tsx` 提供 `change-history` 示例渲染器。
 `src/features/docs/DocsPage.tsx` 只在 YAML fenced block 明确提供 `renderer=<name>` 时解析数据。
 未知 renderer 和 YAML 解析错误均保留原始代码并显示诊断，不从 Git 文档加载代码。
 
+Phase 3 剩余部分实现位置：`src/features/docs/workspaceSources.ts` 在浏览器本地保存多个在线仓库、
+本地文件夹和本地 Git 来源，以及各来源最后路由与 Sidebar 展开状态。来源的添加、重命名、排序和
+删除统一放在设置页；Sidebar 顶部只显示当前来源标题，点击后通过弹出菜单切换其他来源。
+`IframeDemoRenderer.tsx` 默认不执行示例，用户点击运行后才以 `sandbox="allow-scripts"`、无同源权限、
+禁止网络连接的 CSP 在 iframe 中运行自包含 HTML，不要求文档仓库或用户电脑安装额外运行时。
+
 Phase 4 第一批实现位置：`src/features/docs/HistoryView.tsx` 展示当前 Markdown 文件的 Commit
-历史，`src/features/docs/DiffView.tsx` 展示 GitHub/Bitbucket Provider 返回的 unified patch；
+历史，`src/features/docs/DiffView.tsx` 将 GitHub/Bitbucket Provider 返回的 unified patch 解析为左右
+对齐的 Split Diff；
 `src/features/docs/versionRoutes.ts` 统一生成历史版本和比较 URL。当前 branch/tag 会先使用 Provider
 返回的对应 Commit SHA，保证“当前版本”比较目标稳定。
 文档页只提供 History 入口；历史列表中的“查看该历史版本”会切换当前文档的 `ref`，不跳转到
@@ -580,3 +585,21 @@ scope 树默认收起，用户展开目录时再按层读取；点击打开文�
 
 测试清单与预期结果见 `tests/README.md`。每完成一部分功能，应先更新本节状态与测试结果，
 再继续下一个 Phase。
+
+Phase 5 第一批实现位置：`src/features/docs/search.ts` 负责搜索模型，`search.worker.ts` 在独立线程完成
+Markdown 纯文本规范化、查询、排序和摘要生成。`DocsPage` 根据 `deviceMemory` 与 CPU 核心数选择低资源、
+平衡或完整模式，分别使用 1/2/4 个读取并发、4/12/32 MB 正文预算以及 150/500/1000 篇正文上限；
+超出单文件或总预算的页面仍会索引标题和路径。页面进入后台时暂停继续读取，查询限制为相关度最高的
+30 条结果。在线索引按 Provider、仓库、Commit、scope 和设备档位缓存于 IndexedDB；本地文件索引仅
+存在于当前 Worker，会话结束后不保留。切换仓库、scope 或版本会载入对应缓存或重新建立索引，搜索
+请求不会发送给第三方搜索服务。
+
+Phase 5 插件第一批以“零用户配置、浏览器内执行、内容仓库不能注入代码”为边界。宿主通过
+`DocsRendererRegistry.registerCodeBlockRenderer()` 注册 fenced-code 渲染器，文档只用语言标识选择
+已经随应用安装的组件。内置 `mermaid` 渲染器动态加载 Mermaid，固定使用严格安全模式并限制文本与
+边数量；KaTeX 通过 `remark-math` / `rehype-katex` 支持 `$...$` 与 `$$...$$`。两者均随应用构建，
+不依赖 CDN、外部渲染服务、CLI、系统软件或仓库级设置。
+
+后续零配置插件推荐顺序：原生 admonition/tabs、严格 JSON/YAML schema 的 ECharts、Markmap。
+继续禁止 `eval`、文档内 JavaScript、远程模块导入和可执行回调；图表数据只能是
+声明式数据。PlantUML 等默认依赖服务器或本机 Java 的方案不进入内置插件范围。

@@ -15,6 +15,7 @@ export function buildDocumentTree(entries: RepositoryEntry[], rootPath = ''): Tr
     .map((entry) => entry.path)
     .filter((path) => !normalizedRoot || path.startsWith(`${normalizedRoot}/`));
   const root: SectionNode = { kind: 'section', path: '', title: '', children: [] };
+  const entriesByPath = new Map(entries.map((entry) => [entry.path, entry]));
 
   for (const fullPath of paths) {
     const relativePath = normalizedRoot ? fullPath.slice(normalizedRoot.length + 1) : fullPath;
@@ -30,7 +31,8 @@ export function buildDocumentTree(entries: RepositoryEntry[], rootPath = ''): Tr
       }
       current = section;
     });
-    const document: DocumentNode = { kind: 'document', path: fullPath, title: titleFromPath(file), isIndex: isIndexFile(fullPath) };
+    const entry = entriesByPath.get(fullPath);
+    const document: DocumentNode = { kind: 'document', path: fullPath, title: titleFromPath(file), isIndex: isIndexFile(fullPath), size: entry?.size };
     current.children.push(document);
   }
 

@@ -26,12 +26,12 @@ export function parseFrontmatter(source: string): ParsedMarkdown {
 }
 
 export function titleFromPath(path: string): string {
-  const name = path.split('/').pop()?.replace(/\.(md|mdx)$/i, '') || path;
+  const name = path.split('/').pop()?.replace(/\.md$/i, '') || path;
   return name.replace(/[-_]+/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 export function isMarkdown(path: string): boolean {
-  return /\.(md|mdx)$/i.test(path);
+  return /\.md$/i.test(path);
 }
 
 export function isIndexFile(path: string): boolean {

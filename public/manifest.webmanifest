@@ -1,0 +1,21 @@
+{
+  "id": "/",
+  "name": "Git MD Viewer",
+  "short_name": "Git MD Viewer",
+  "description": "Browse Markdown documentation from Git repositories and local folders.",
+  "lang": "zh-CN",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f5f7fb",
+  "theme_color": "#f5f7fb",
+  "icons": [
+    { "src": "/icons/git-md-viewer-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icons/git-md-viewer-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icons/git-md-viewer.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Open example documentation", "short_name": "Example", "url": "/docs/vitejs/vite/docs/guide?scope=docs%2Fguide", "icons": [{ "src": "/icons/git-md-viewer.svg", "sizes": "any", "type": "image/svg+xml" }] },
+    { "name": "Set up a document source", "short_name": "Set up", "url": "/?mode=repository", "icons": [{ "src": "/icons/git-md-viewer.svg", "sizes": "any", "type": "image/svg+xml" }] }
+  ]
+}

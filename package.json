@@ -1,8 +1,15 @@
 {
-  "name": "markdown-git-documentation-viewer",
-  "private": true,
+  "name": "@md-with-git/viewer",
   "version": "0.1.0",
   "type": "module",
+  "packageManager": "pnpm@11.16.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yougikou/md-with-git.git"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
@@ -11,11 +18,15 @@
   "dependencies": {
     "buffer": "6.0.3",
     "isomorphic-git": "^1.25.0",
+    "katex": "^0.18.1",
+    "mermaid": "^11.16.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-markdown": "^9.0.1",
     "react-router-dom": "^6.28.0",
+    "rehype-katex": "^7.0.1",
     "remark-gfm": "^4.0.0",
+    "remark-math": "^6.0.0",
     "yaml": "^2.7.0"
   },
   "devDependencies": {

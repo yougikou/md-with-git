@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
 import { buildDocumentTree, findDocument, findFirstDocument } from './tree';
 import { parseFrontmatter, resolveAssetPath } from './markdown';
-import { documentCacheKey, readMarkdownCache, writeMarkdownCache } from './cache';
+import { documentCacheKey, readMarkdownCache, readSearchIndexCache, searchIndexCacheKey, writeMarkdownCache, writeSearchIndexCache } from './cache';
 import { BitbucketProvider, getLocalFolder, GitHubProvider } from './providers';
 import type { DocumentNode, RepositoryEntry, RepositoryProvider, RepositoryRef, TreeNode } from './types';
 import type { ImgHTMLAttributes } from 'react';
@@ -15,25 +17,73 @@ import { HistoryView } from './HistoryView';
 import { DiffView } from './DiffView';
 import type { Commit, DiffResult } from './types';
 import { encodeDocumentUrl, parseDocumentRoute } from './versionRoutes';
+import { flattenDocuments } from './search';
+import type { DocumentSearchResult } from './search';
+import { loadWorkspaceSources, saveWorkspaceSource, updateWorkspaceSource, workspaceSourceHref } from './workspaceSources';
+import type { WorkspaceSource } from './workspaceSources';
+import { activateRepositoryAccessToken } from './accessTokens';
+import { LanguageSwitcher, useI18n } from '../../i18n';
 
 const githubProvider = new GitHubProvider();
 const bitbucketProvider = new BitbucketProvider();
 type SourceKind = 'github' | 'bitbucket' | 'local';
 
-function ErrorState({ message, actionHref = '/', actionLabel = '返回首页' }: { message: string; actionHref?: string; actionLabel?: string }) {
-  return <div className="state-card error-state"><span className="state-icon">!</span><h2>文档加载失败</h2><p>{message}</p><Link to={actionHref} className="button button-primary">{actionLabel}</Link></div>;
+interface SearchProfile {
+  concurrency: number;
+  bodyBudget: number;
+  maxBodyDocuments: number;
+  maxFileSize: number;
+  label: string;
 }
 
-function SidebarNode({ node, activePath, onNavigate }: { node: TreeNode; activePath: string; onNavigate: (path: string) => void }) {
-  const [open, setOpen] = useState(true);
+function getSearchProfile(): SearchProfile {
+  const memory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
+  const cores = navigator.hardwareConcurrency || 4;
+  if ((memory !== undefined && memory <= 2) || cores <= 2) return { concurrency: 1, bodyBudget: 4 * 1024 * 1024, maxBodyDocuments: 150, maxFileSize: 192 * 1024, label: '低资源模式' };
+  if ((memory !== undefined && memory <= 4) || (memory === undefined && cores <= 8) || cores <= 4) return { concurrency: 2, bodyBudget: 12 * 1024 * 1024, maxBodyDocuments: 500, maxFileSize: 512 * 1024, label: '平衡模式' };
+  return { concurrency: 4, bodyBudget: 32 * 1024 * 1024, maxBodyDocuments: 1000, maxFileSize: 1024 * 1024, label: '完整模式' };
+}
+
+async function waitUntilPageIsVisible(): Promise<void> {
+  if (document.visibilityState === 'visible') return;
+  await new Promise<void>((resolve) => document.addEventListener('visibilitychange', () => resolve(), { once: true }));
+}
+
+async function readSearchSource(provider: RepositoryProvider, owner: string, repository: string, path: string, ref?: string): Promise<string> {
+  if (provider.kind === 'local') return provider.getFile({ owner, repository, path, ref });
+  const url = await provider.getAssetUrl({ owner, repository, path, ref });
+  const response = await fetch(url, { headers: { Accept: 'text/plain' } });
+  if (!response.ok) throw new Error(`全文索引读取失败（${response.status}）。`);
+  return response.text();
+}
+
+function ErrorState({ message, actionHref = '/', actionLabel = '返回首页' }: { message: string; actionHref?: string; actionLabel?: string }) {
+  const { t } = useI18n();
+  return <div className="state-card error-state"><span className="state-icon">!</span><h2>{t('failedToLoad')}</h2><p>{message}</p><Link to={actionHref} className="button button-primary">{actionLabel === '返回首页' ? t('home') : actionLabel}</Link></div>;
+}
+
+function SidebarNode({ node, activePath, expandedPaths, onNavigate, onToggle }: { node: TreeNode; activePath: string; expandedPaths: Set<string>; onNavigate: (path: string) => void; onToggle: (path: string) => void }) {
   if (node.kind === 'document') {
     return <button className={`sidebar-link ${activePath === node.path ? 'active' : ''}`} onClick={() => onNavigate(node.path)}><span className="file-icon">{node.isIndex ? '⌂' : '·'}</span>{node.title}</button>;
   }
-  return <div className="sidebar-group"><button className="sidebar-section" onClick={() => setOpen((value) => !value)}><span className={`chevron ${open ? 'open' : ''}`}>›</span><span>{node.title}</span></button>{open && <div className="sidebar-children">{node.children.map((child) => <SidebarNode key={child.path} node={child} activePath={activePath} onNavigate={onNavigate} />)}</div>}</div>;
+  const open = expandedPaths.has(node.path);
+  return <div className="sidebar-group"><button className="sidebar-section" onClick={() => onToggle(node.path)}><span className={`chevron ${open ? 'open' : ''}`}>›</span><span>{node.title}</span></button>{open && <div className="sidebar-children">{node.children.map((child) => <SidebarNode key={child.path} node={child} activePath={activePath} expandedPaths={expandedPaths} onNavigate={onNavigate} onToggle={onToggle} />)}</div>}</div>;
 }
 
-function Sidebar({ tree, activePath, onNavigate }: { tree: TreeNode[]; activePath: string; onNavigate: (path: string) => void }) {
-  return <aside className="docs-sidebar"><div className="sidebar-heading"><span className="sidebar-kicker">DOCUMENTATION</span><span className="tree-count">{countDocuments(tree)} pages</span></div><nav>{tree.map((node) => <SidebarNode key={node.path} node={node} activePath={activePath} onNavigate={onNavigate} />)}</nav></aside>;
+function WorkspaceSwitcher({ sources, activeId, onSelect }: { sources: WorkspaceSource[]; activeId?: string; onSelect: (id: string) => void }) {
+  const active = sources.find((source) => source.id === activeId);
+  const alternatives = sources.filter((source) => source.id !== activeId);
+  if (!active || !activeId) return null;
+  return <details className="workspace-switcher"><summary><span className="workspace-source-title">{active.label}</span><span className="workspace-switcher-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="m7 9 5-5 5 5M7 15l5 5 5-5" /></svg></span></summary>{alternatives.length > 0 && <div className="workspace-switcher-menu" role="menu">{alternatives.map((source) => <button type="button" role="menuitem" key={source.id} onClick={(event) => { const details = event.currentTarget.closest('details'); if (details) details.open = false; onSelect(source.id); }}><span>{source.label}</span><small>{source.kind === 'local-folder' ? '本地文件夹' : source.kind === 'local-git' ? '本地 Git' : source.kind === 'bitbucket' ? 'Bitbucket' : 'GitHub'}</small></button>)}</div>}</details>;
+}
+
+function Sidebar({ tree, activePath, expandedPaths, onNavigate, onToggle, sources, activeSourceId, onSelectSource }: { tree: TreeNode[]; activePath: string; expandedPaths: Set<string>; onNavigate: (path: string) => void; onToggle: (path: string) => void; sources: WorkspaceSource[]; activeSourceId?: string; onSelectSource: (id: string) => void }) {
+  const { t } = useI18n();
+  return <aside className="docs-sidebar"><WorkspaceSwitcher sources={sources} activeId={activeSourceId} onSelect={onSelectSource} /><div className="sidebar-heading"><span className="sidebar-kicker">{t('documentation')}</span><span className="tree-count">{countDocuments(tree)} {t('pages')}</span></div><nav>{tree.map((node) => <SidebarNode key={node.path} node={node} activePath={activePath} expandedPaths={expandedPaths} onNavigate={onNavigate} onToggle={onToggle} />)}</nav></aside>;
+}
+
+function collectSectionPaths(nodes: TreeNode[]): string[] {
+  return nodes.flatMap((node) => node.kind === 'document' ? [] : [node.path, ...collectSectionPaths(node.children)]);
 }
 
 function countDocuments(nodes: TreeNode[]): number {
@@ -41,8 +91,9 @@ function countDocuments(nodes: TreeNode[]): number {
 }
 
 function LoadingState({ source }: { source: SourceKind }) {
+  const { t } = useI18n();
   const label = source === 'local' ? '本地文件夹' : source === 'bitbucket' ? 'Bitbucket' : 'GitHub';
-  return <div className="state-card loading-state"><div className="spinner" /><h2>正在发现文档</h2><p>正在从 {label} 获取文档空间…</p></div>;
+  return <div className="state-card loading-state"><div className="spinner" /><h2>{t('loadingDocuments')}</h2><p>{t('loadingFrom', { source: label })}</p></div>;
 }
 
 function MarkdownImage({ src, alt, provider, owner, repository, documentPath, assetRef, ...props }: ImgHTMLAttributes<HTMLImageElement> & { provider: RepositoryProvider; owner: string; repository: string; documentPath: string; assetRef?: string }) {
@@ -72,6 +123,14 @@ function rendererNameFromMeta(meta: string): string | undefined {
   return meta.match(/(?:^|\s)renderer=([^\s]+)/)?.[1];
 }
 
+function HighlightedSearchText({ text, query }: { text: string; query: string }) {
+  const terms = query.trim().split(/\s+/).filter(Boolean).sort((left, right) => right.length - left.length);
+  if (!terms.length) return <>{text}</>;
+  const escaped = terms.map((term) => term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const parts = text.split(new RegExp(`(${escaped.join('|')})`, 'gi'));
+  return <>{parts.map((part, index) => terms.some((term) => term.toLocaleLowerCase() === part.toLocaleLowerCase()) ? <mark key={`${part}-${index}`}>{part}</mark> : part)}</>;
+}
+
 function YamlRendererBlock({ name, source, registry, context }: { name: string; source: string; registry: DocsRendererRegistry; context: YamlBlockContext }) {
   let value: unknown;
   try {
@@ -88,6 +147,7 @@ function YamlRendererBlock({ name, source, registry, context }: { name: string; 
 export default function DocsPage() {
   const { '*': wildcard = '' } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const [tree, setTree] = useState<TreeNode[]>([]);
   const [source, setSource] = useState<{ path: string; content: string } | null>(null);
@@ -106,6 +166,17 @@ export default function DocsPage() {
   const [comparisonAfter, setComparisonAfter] = useState<string | null>(null);
   const [diffLoading, setDiffLoading] = useState(false);
   const [diffError, setDiffError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<DocumentSearchResult[]>([]);
+  const [indexing, setIndexing] = useState(false);
+  const [indexedCount, setIndexedCount] = useState(0);
+  const [indexTotal, setIndexTotal] = useState(0);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [searchNotice, setSearchNotice] = useState<string | null>(null);
+  const [workspaceSources, setWorkspaceSources] = useState<WorkspaceSource[]>(loadWorkspaceSources);
+  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
+  const searchWorker = useRef<Worker | null>(null);
+  const searchRequestId = useRef(0);
   const rendererRegistry = useDocsRendererRegistry();
 
   const segments = wildcard.split('/').filter(Boolean);
@@ -118,15 +189,34 @@ export default function DocsPage() {
   const sourceKind = sourceFromQuery(searchParams.get('source'));
   const localMode = sourceKind === 'local' && searchParams.get('localMode') === 'git' ? 'git' : 'folder';
   const localId = searchParams.get('localId');
+  const activeSourceId = searchParams.get('sourceId') || undefined;
   const localProvider = useMemo(() => sourceKind === 'local' ? getLocalFolder(localId, localMode) : undefined, [localId, localMode, sourceKind]);
   const provider = useMemo<RepositoryProvider | undefined>(() => {
     if (sourceKind === 'local') return localProvider;
     return sourceKind === 'bitbucket' ? bitbucketProvider : githubProvider;
   }, [localProvider, sourceKind]);
+  useEffect(() => {
+    if (sourceKind === 'github' || sourceKind === 'bitbucket') activateRepositoryAccessToken(sourceKind, owner, repository);
+  }, [owner, repository, sourceKind]);
   const documentPath = scope && requestedPath === scope ? '' : requestedPath;
   const activeRef = ref || defaultRef;
   const currentVersion = refs.find((item) => item.name === activeRef)?.sha || activeRef;
   const activePath = source?.path || documentPath;
+
+  useEffect(() => {
+    if (activeSourceId || !owner || !repository || (sourceKind === 'local' && !localId)) return;
+    const kind = sourceKind === 'local' ? localMode === 'git' ? 'local-git' : 'local-folder' : sourceKind;
+    const saved = saveWorkspaceSource({ label: sourceKind === 'local' ? `${repository === 'git' ? '本地 Git' : '本地文档'}${scope ? ` · ${scope}` : ''}` : `${owner}/${repository}${scope ? ` · ${scope}` : ''}`, kind, owner, repository, scope, ref, localId: localId || undefined });
+    setWorkspaceSources(loadWorkspaceSources());
+    const nextQuery = new URLSearchParams(searchParams);
+    nextQuery.set('sourceId', saved.id);
+    navigate(`${location.pathname}?${nextQuery.toString()}`, { replace: true });
+  }, [activeSourceId, localId, localMode, location.pathname, navigate, owner, ref, repository, scope, searchParams, sourceKind]);
+
+  useEffect(() => {
+    if (!activeSourceId) return;
+    updateWorkspaceSource(activeSourceId, { lastHref: `${location.pathname}${location.search}` });
+  }, [activeSourceId, location.pathname, location.search]);
 
   useEffect(() => {
     if (!owner || !repository) { setLoading(false); setError('请使用 /docs/:owner/:repository 打开一个文档空间。'); return; }
@@ -159,6 +249,27 @@ export default function DocsPage() {
   }, [navigate, owner, repository, searchParams]);
 
   useEffect(() => {
+    if (!tree.length) return;
+    const active = loadWorkspaceSources().find((item) => item.id === activeSourceId);
+    setExpandedPaths(new Set(active?.expandedPaths ?? collectSectionPaths(tree)));
+  }, [activeSourceId, tree]);
+
+  const toggleSection = useCallback((path: string) => {
+    setExpandedPaths((current) => {
+      const next = new Set(current);
+      if (next.has(path)) next.delete(path); else next.add(path);
+      if (activeSourceId) updateWorkspaceSource(activeSourceId, { expandedPaths: [...next] });
+      return next;
+    });
+  }, [activeSourceId]);
+
+  const selectWorkspaceSource = useCallback((id: string) => {
+    const next = loadWorkspaceSources().find((item) => item.id === id);
+    if (next) navigate(workspaceSourceHref(next));
+  }, [navigate]);
+
+
+  useEffect(() => {
     if (!selectedDocument || !provider) return;
     if (viewMode !== 'document') { setContentLoading(false); setContentError(null); setSource(null); return; }
     const query = { owner, repository, path: selectedDocument.path, ref: activeRef };
@@ -172,6 +283,98 @@ export default function DocsPage() {
     readContent.then((content) => { if (!cancelled) setSource({ path: selectedDocument.path, content }); }).catch((reason: unknown) => { if (!cancelled) setContentError(reason instanceof Error ? reason.message : '无法读取 Markdown 文件。'); }).finally(() => { if (!cancelled) setContentLoading(false); });
     return () => { cancelled = true; };
   }, [activeRef, localId, owner, provider, repository, selectedDocument, sourceKind, viewMode]);
+
+  useEffect(() => {
+    if (!provider || !tree.length) return;
+    let cancelled = false;
+    const documents = flattenDocuments(tree);
+    const profile = getSearchProfile();
+    const indexWorker = new Worker(new URL('./search.worker.ts', import.meta.url), { type: 'module' });
+    searchWorker.current?.terminate();
+    searchWorker.current = indexWorker;
+    let cursor = 0;
+    let completed = 0;
+    let failed = 0;
+    let skipped = 0;
+    let bodyBytes = 0;
+    let bodyDocuments = 0;
+    const version = currentVersion || activeRef || 'default';
+    const profileKey = `${version}@${profile.bodyBudget}-${profile.maxBodyDocuments}-${profile.maxFileSize}`;
+    const cacheKey = provider.kind === 'local' ? null : searchIndexCacheKey(provider.kind, owner, repository, profileKey, scope || '');
+    setSearchQuery(''); setSearchResults([]); setSearchError(null); setSearchNotice(null);
+    setIndexedCount(0); setIndexTotal(documents.length); setIndexing(true);
+
+    indexWorker.onmessage = (event: MessageEvent<{ type: 'ready'; serialized?: string; degradedCount: number } | { type: 'results'; id: number; results: DocumentSearchResult[] }>) => {
+      if (cancelled) return;
+      const message = event.data;
+      if (message.type === 'results') {
+        if (message.id === searchRequestId.current) setSearchResults(message.results);
+        return;
+      }
+      setIndexing(false);
+      setIndexedCount(documents.length);
+      if (message.degradedCount > 0) setSearchNotice(`${profile.label}：${message.degradedCount} 个文档仅索引标题和路径。`);
+      if (cacheKey && message.serialized) void writeSearchIndexCache(cacheKey, message.serialized);
+    };
+
+    const indexingWorker = async () => {
+      while (!cancelled) {
+        const index = cursor++;
+        const documentNode = documents[index];
+        if (!documentNode) return;
+        try {
+          if ((documentNode.size !== undefined && documentNode.size > profile.maxFileSize) || bodyBytes >= profile.bodyBudget || bodyDocuments >= profile.maxBodyDocuments) {
+            skipped += 1;
+            indexWorker.postMessage({ type: 'add', document: { path: documentNode.path, title: documentNode.title }, content: '' });
+          } else {
+            await waitUntilPageIsVisible();
+            if (cancelled) return;
+            const content = await readSearchSource(provider, owner, repository, documentNode.path, activeRef);
+            if (cancelled) return;
+            const size = new TextEncoder().encode(content).byteLength;
+            if (size > profile.maxFileSize || bodyBytes + size > profile.bodyBudget || bodyDocuments >= profile.maxBodyDocuments) {
+              skipped += 1;
+              indexWorker.postMessage({ type: 'add', document: { path: documentNode.path, title: documentNode.title }, content: '' });
+            } else {
+              bodyBytes += size;
+              bodyDocuments += 1;
+              indexWorker.postMessage({ type: 'add', document: { path: documentNode.path, title: documentNode.title }, content });
+            }
+          }
+        } catch {
+          failed += 1;
+          if (!cancelled) indexWorker.postMessage({ type: 'add', document: { path: documentNode.path, title: documentNode.title }, content: '' });
+        } finally {
+          completed += 1;
+          if (!cancelled) setIndexedCount(completed);
+        }
+      }
+    };
+    const buildIndex = async () => {
+      if (cacheKey) {
+        const cached = await readSearchIndexCache(cacheKey);
+        if (cancelled) return;
+        if (cached) {
+          indexWorker.postMessage({ type: 'load', serialized: cached });
+          return;
+        }
+      }
+      await Promise.all(Array.from({ length: Math.min(profile.concurrency, documents.length) }, indexingWorker));
+      if (cancelled) return;
+      setSearchError(failed ? `${failed} 个文档读取失败，其余文档仍可搜索。` : null);
+      indexWorker.postMessage({ type: 'finish', cacheable: provider.kind !== 'local', degradedCount: failed + skipped });
+    };
+    void buildIndex();
+    return () => { cancelled = true; indexWorker.terminate(); if (searchWorker.current === indexWorker) searchWorker.current = null; };
+  }, [activeRef, currentVersion, owner, provider, repository, scope, tree]);
+
+  useEffect(() => {
+    const query = searchQuery.trim();
+    if (!query || indexing || !searchWorker.current) { setSearchResults([]); return; }
+    const id = ++searchRequestId.current;
+    const timer = window.setTimeout(() => searchWorker.current?.postMessage({ type: 'query', id, query, limit: 30 }), 80);
+    return () => window.clearTimeout(timer);
+  }, [indexing, searchQuery]);
 
   const fromRef = searchParams.get('from') || undefined;
   const toRef = searchParams.get('to') || undefined;
@@ -195,7 +398,7 @@ export default function DocsPage() {
 
   if (loading) return <div className="docs-shell"><Topbar owner={owner} repository={repository} scope={scope} source={sourceKind} localMode={localMode} onMenu={() => setSidebarOpen(true)} /><LoadingState source={sourceKind} /></div>;
   if (error && !tree.length) return <div className="docs-shell"><Topbar owner={owner} repository={repository} scope={scope} source={sourceKind} localMode={localMode} onMenu={() => setSidebarOpen(true)} /><ErrorState message={error} actionHref={sourceKind === 'local' ? `/?mode=${localMode === 'git' ? 'local-git' : 'local-folder'}` : '/'} actionLabel={sourceKind === 'local' ? localMode === 'git' ? '重新设置本地 Git' : '重新设置本地文档' : '返回首页'} /></div>;
-  if (!tree.length) return <div className="docs-shell"><Topbar owner={owner} repository={repository} scope={scope} source={sourceKind} localMode={localMode} onMenu={() => setSidebarOpen(true)} /><ErrorState message={scope ? `目录 “${scope}” 中没有发现 Markdown 或 MDX 文件。` : '文档空间中没有发现 Markdown 或 MDX 文件。'} /></div>;
+  if (!tree.length) return <div className="docs-shell"><Topbar owner={owner} repository={repository} scope={scope} source={sourceKind} localMode={localMode} onMenu={() => setSidebarOpen(true)} /><ErrorState message={scope ? `目录 “${scope}” 中没有发现 Markdown 文件。` : '文档空间中没有发现 Markdown 文件。'} /></div>;
   if (!selectedDocument) return <div className="docs-shell"><Topbar owner={owner} repository={repository} scope={scope} source={sourceKind} localMode={localMode} onMenu={() => setSidebarOpen(true)} /><ErrorState message="找不到请求的 Markdown 文档，请从左侧目录选择一个页面。" /></div>;
 
   const parsed = source ? parseFrontmatter(source.content) : null;
@@ -212,12 +415,14 @@ export default function DocsPage() {
   const isHistoricalVersion = viewMode === 'document' && searchParams.get('historyVersion') === '1';
   const hideDocumentDirectory = isHistoricalVersion || viewMode === 'history' || viewMode === 'diff';
   const diffViewError = viewMode === 'diff' && (!fromRef || !toRef) ? '请在 diff URL 中提供 from 和 to 两个版本，例如 ?from=abc123&to=def456。' : diffError;
-  const viewContent = viewMode === 'history' ? <HistoryView commits={history} loading={historyLoading} error={historyError} documentPath={selectedDocument.path} documentHref={documentHref} diffPath={diffPath} currentRef={currentVersion} sourceKind={sourceKind} /> : viewMode === 'diff' ? <DiffView diff={diff} before={comparisonBefore} after={comparisonAfter} provider={provider} owner={owner} repository={repository} documentPath={selectedDocument.path} loading={diffLoading} error={diffViewError} historyPath={historyPath} /> : contentLoading ? <div className="document-skeleton"><div /><div /><div /><div /></div> : contentError ? <div className="inline-error">{contentError}</div> : !parsed ? <div className="document-skeleton"><div /><div /><div /><div /></div> : <><div className="document-meta"><span>{selectedDocument.path}</span>{activeRef && <span className="ref-badge">{activeRef.slice(0, 12)}</span>}<span className="document-actions"><Link to={historyPath}>{isHistoricalVersion ? '返回历史一览' : 'History'}</Link></span></div><article className="markdown-body"><h1>{parsed.title}</h1><ReactMarkdown remarkPlugins={[remarkGfm]} components={{ h1: () => null, a: ({ href, children, ...props }) => <a href={href} {...props} target={href?.startsWith('http') ? '_blank' : undefined} rel={href?.startsWith('http') ? 'noreferrer' : undefined}>{children}</a>, img: ({ src, alt, ...props }) => provider ? <MarkdownImage src={src} alt={alt} provider={provider} owner={owner} repository={repository} documentPath={selectedDocument.path} assetRef={activeRef} {...props} /> : null, code: ({ className, children, node, ...props }) => { const language = className?.replace('language-', ''); const rendererName = language === 'yaml' ? rendererNameFromMeta(readCodeMeta(node)) : undefined; if (rendererName) return <YamlRendererBlock name={rendererName} source={String(children).trim()} registry={rendererRegistry} context={{ documentPath: selectedDocument.path, repository, ref: activeRef, scope }} />; return <code className={`${className || ''} code-inline`} data-language={language} {...props}>{children}</code>; } }}>{parsed.content}</ReactMarkdown></article></>;
-  return <div className="docs-shell"><Topbar owner={owner} repository={repository} scope={scope} source={sourceKind} localMode={localMode} showMenu={!hideDocumentDirectory} onMenu={() => setSidebarOpen(true)} /><div className={`docs-layout ${!hideDocumentDirectory && sidebarOpen ? 'sidebar-visible' : ''}`}>{!hideDocumentDirectory && <><div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} /><Sidebar tree={tree} activePath={activePath} onNavigate={openDocument} /></>}<main className="docs-main"><div className="document-wrap">{viewContent}{viewMode === 'document' && !contentLoading && !contentError && parsed && <div className="document-footer"><span>Powered by Git MD Viewer</span><span className="footer-note">{refs.length > 0 ? 'Local Git · read-only' : sourceKind === 'local' ? 'Local folder · read-only' : `${sourceKind} · ${scope}`}</span></div>}</div></main></div></div>;
+  const viewContent = viewMode === 'history' ? <HistoryView commits={history} loading={historyLoading} error={historyError} documentPath={selectedDocument.path} documentHref={documentHref} diffPath={diffPath} currentRef={currentVersion} sourceKind={sourceKind} /> : viewMode === 'diff' ? <DiffView diff={diff} before={comparisonBefore} after={comparisonAfter} provider={provider} owner={owner} repository={repository} documentPath={selectedDocument.path} loading={diffLoading} error={diffViewError} historyPath={historyPath} /> : contentLoading ? <div className="document-skeleton"><div /><div /><div /><div /></div> : contentError ? <div className="inline-error">{contentError}</div> : !parsed ? <div className="document-skeleton"><div /><div /><div /><div /></div> : <><div className="document-meta"><span>{selectedDocument.path}</span>{activeRef && <span className="ref-badge">{activeRef.slice(0, 12)}</span>}<span className="document-actions"><Link to={historyPath}>{isHistoricalVersion ? '返回历史一览' : 'History'}</Link></span></div><article className="markdown-body"><h1>{parsed.title}</h1><ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[[rehypeKatex, { throwOnError: false, strict: 'warn', trust: false }]]} components={{ h1: () => null, a: ({ href, children, ...props }) => <a href={href} {...props} target={href?.startsWith('http') ? '_blank' : undefined} rel={href?.startsWith('http') ? 'noreferrer' : undefined}>{children}</a>, img: ({ src, alt, ...props }) => provider ? <MarkdownImage src={src} alt={alt} provider={provider} owner={owner} repository={repository} documentPath={selectedDocument.path} assetRef={activeRef} {...props} /> : null, code: ({ className, children, node, ...props }) => { const language = className?.replace('language-', ''); const meta = readCodeMeta(node); const rendererName = language === 'yaml' ? rendererNameFromMeta(meta) : undefined; const CodeRenderer = language ? rendererRegistry.getCodeBlockRenderer(language) : undefined; const codeSource = String(children).replace(/\n$/, ''); const context = { documentPath: selectedDocument.path, repository, ref: activeRef, scope }; if (rendererName) return <YamlRendererBlock name={rendererName} source={codeSource.trim()} registry={rendererRegistry} context={context} />; if (CodeRenderer && language) return <CodeRenderer source={codeSource} language={language} meta={meta} context={context} />; return <code className={`${className || ''} code-inline`} data-language={language} {...props}>{children}</code>; } }}>{parsed.content}</ReactMarkdown></article></>;
+  const search = { query: searchQuery, results: searchResults, indexing, indexedCount, indexTotal, error: searchError, notice: searchNotice, onQueryChange: setSearchQuery, onResultSelect: openDocument };
+  return <div className="docs-shell"><Topbar owner={owner} repository={repository} scope={scope} source={sourceKind} localMode={localMode} showMenu={!hideDocumentDirectory} onMenu={() => setSidebarOpen(true)} search={search} /><div className={`docs-layout ${!hideDocumentDirectory && sidebarOpen ? 'sidebar-visible' : ''}`}>{!hideDocumentDirectory && <><div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} /><Sidebar tree={tree} activePath={activePath} expandedPaths={expandedPaths} onNavigate={openDocument} onToggle={toggleSection} sources={workspaceSources} activeSourceId={activeSourceId} onSelectSource={selectWorkspaceSource} /></>}<main className="docs-main"><div className={`document-wrap ${viewMode === 'diff' ? 'diff-document-wrap' : ''}`}>{viewContent}{viewMode === 'document' && !contentLoading && !contentError && parsed && <div className="document-footer"><span>Powered by Git MD Viewer</span><span className="footer-note">{refs.length > 0 ? 'Local Git · read-only' : sourceKind === 'local' ? 'Local folder · read-only' : `${sourceKind} · ${scope}`}</span></div>}</div></main></div></div>;
 }
 
-function Topbar({ owner, repository, scope, source, localMode, showMenu = true, onMenu }: { owner: string; repository: string; scope?: string; source: SourceKind; localMode: 'folder' | 'git'; showMenu?: boolean; onMenu: () => void }) {
+function Topbar({ owner, repository, scope, source, localMode, showMenu = true, onMenu, search }: { owner: string; repository: string; scope?: string; source: SourceKind; localMode: 'folder' | 'git'; showMenu?: boolean; onMenu: () => void; search?: { query: string; results: DocumentSearchResult[]; indexing: boolean; indexedCount: number; indexTotal: number; error: string | null; notice: string | null; onQueryChange: (value: string) => void; onResultSelect: (path: string) => void } }) {
+  const { t } = useI18n();
   const sourceLabel = source === 'bitbucket' ? 'Bitbucket' : source === 'local' ? 'Local' : 'GitHub';
   const settingsHref = source === 'local' ? `/?mode=${localMode === 'git' ? 'local-git' : 'local-folder'}` : '/?mode=repository';
-  return <header className="docs-topbar">{showMenu && <button className="mobile-menu" onClick={onMenu} aria-label="打开目录">☰</button>}<Link to="/" className="topbar-brand"><span className="brand-mark">MD</span><span>Git MD Viewer</span></Link><span className="topbar-divider">/</span><span className="source-badge">{sourceLabel}</span><span className="repo-name">{owner && repository ? `${owner}/${repository}` : 'Local folder'}</span><span className="topbar-spacer" />{scope && <span className="topbar-scope">当前文档目录: {scope}</span>}<Link className="repo-switcher" to={settingsHref}>进入设置</Link></header>;
+  return <header className="docs-topbar">{showMenu && <button className="mobile-menu" onClick={onMenu} aria-label={t('openDirectory')}>☰</button>}<Link to="/" className="topbar-brand"><span className="brand-mark">MD</span><span>Git MD Viewer</span></Link><span className="topbar-divider">/</span><span className="source-badge">{sourceLabel}</span><span className="repo-name">{owner && repository ? `${owner}/${repository}` : t('localFolderName')}</span><span className="topbar-spacer" />{search && <div className="document-search"><input value={search.query} onChange={(event) => search.onQueryChange(event.target.value)} placeholder={search.indexing ? t('indexing', { done: search.indexedCount, total: search.indexTotal }) : t('searchDocuments')} aria-label={t('searchDocuments')} onKeyDown={(event) => { if (event.key === 'Escape') search.onQueryChange(''); }} />{search.query.trim() && <div className="search-results" role="listbox">{search.indexing ? <p>{t('indexing', { done: search.indexedCount, total: search.indexTotal })}…</p> : search.results.length ? <>{search.notice && <p className="search-notice">{search.notice}</p>}{search.error && <p>{search.error}</p>}{search.results.map((result) => <button role="option" aria-selected="false" key={result.path} onClick={() => { search.onResultSelect(result.path); search.onQueryChange(''); }}><strong><HighlightedSearchText text={result.title} query={search.query} /></strong><span className="search-result-path"><HighlightedSearchText text={result.path} query={search.query} /></span><span className="search-result-preview"><HighlightedSearchText text={result.snippet} query={search.query} /></span></button>)}</> : <><p>{search.error || t('noMatches')}</p>{search.notice && <p className="search-notice">{search.notice}</p>}</>}</div>}</div>}{scope && <span className="topbar-scope">{t('currentDirectory', { scope })}</span>}<LanguageSwitcher /><Link className="repo-switcher" to={settingsHref} aria-label={t('settings')} title={t('settings')}><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" /><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 8.5 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.6 8.5a1.7 1.7 0 0 0-.34-1.88l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3a2 2 0 1 1 4 0v.09A1.7 1.7 0 0 0 15.5 4.6a1.7 1.7 0 0 0 1.88-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.14.37.36.7.65.96.3.26.67.4 1.06.4H21a2 2 0 1 1 0 4h-.09A1.7 1.7 0 0 0 19.4 15Z" /></svg></Link></header>;
 }

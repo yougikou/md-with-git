@@ -1,6 +1,7 @@
 import type {
   AssetQuery, Commit, CompareQuery, DiffResult, FileQuery, HistoryQuery, RepositoryEntry, RepositoryProvider, RepositoryRef, TreeQuery,
 } from '../types';
+import { getAccessToken } from '../accessTokens';
 
 interface BitbucketPage<T> {
   values: T[];
@@ -31,15 +32,20 @@ export class BitbucketProvider implements RepositoryProvider {
   readonly kind = 'bitbucket' as const;
   private readonly apiBase = 'https://api.bitbucket.org/2.0';
 
+  private headers(accept: string): HeadersInit {
+    const token = getAccessToken('bitbucket');
+    return { Accept: accept, ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+  }
+
   private repo(input: TreeQuery) {
     return `${this.apiBase}/repositories/${encodeURIComponent(input.owner)}/${encodeURIComponent(input.repository)}`;
   }
 
   private async request<T>(url: string): Promise<T> {
-    const response = await fetch(url, { headers: { Accept: 'application/json' } });
+    const response = await fetch(url, { headers: this.headers('application/json') });
     if (!response.ok) {
-      if (response.status === 404) throw new Error('Bitbucket 工作区、仓库、版本或文件不存在。');
-      if (response.status === 401 || response.status === 403) throw new Error('Bitbucket 资源需要登录或当前凭据没有访问权限。');
+      if (response.status === 404) throw new Error('Bitbucket 工作区、仓库、版本或文件不存在；私有仓库请确认令牌已获授权。');
+      if (response.status === 401 || response.status === 403) throw new Error('Bitbucket 资源需要登录，或当前访问令牌没有读取权限。');
       throw new Error(`Bitbucket API 请求失败（${response.status}）。`);
     }
     return response.json() as Promise<T>;
@@ -79,13 +85,17 @@ export class BitbucketProvider implements RepositoryProvider {
   async getFile(input: FileQuery): Promise<string> {
     const ref = input.ref || 'main';
     const url = `${this.repo(input)}/src/${encodeURIComponent(ref)}/${input.path.split('/').map(encodeURIComponent).join('/')}`;
-    const response = await fetch(url, { headers: { Accept: 'text/plain' } });
+    const response = await fetch(url, { headers: this.headers('text/plain') });
     if (!response.ok) throw new Error(`Bitbucket 文件读取失败（${response.status}）。`);
     return response.text();
   }
 
-  getAssetUrl(input: AssetQuery): string {
-    return `https://bitbucket.org/${encodeURIComponent(input.owner)}/${encodeURIComponent(input.repository)}/raw/${encodeURIComponent(input.ref || 'main')}/${input.path.split('/').map(encodeURIComponent).join('/')}`;
+  async getAssetUrl(input: AssetQuery): Promise<string> {
+    const ref = input.ref || 'main';
+    const url = `${this.repo(input)}/src/${encodeURIComponent(ref)}/${input.path.split('/').map(encodeURIComponent).join('/')}`;
+    const response = await fetch(url, { headers: this.headers('application/octet-stream') });
+    if (!response.ok) throw new Error(`Bitbucket 资源读取失败（${response.status}）。`);
+    return URL.createObjectURL(await response.blob());
   }
 
   async getFileHistory(input: HistoryQuery): Promise<Commit[]> {
@@ -95,7 +105,7 @@ export class BitbucketProvider implements RepositoryProvider {
   }
 
   async compare(input: CompareQuery): Promise<DiffResult> {
-    const response = await fetch(`${this.repo(input)}/diff/${encodeURIComponent(input.to)}?from=${encodeURIComponent(input.from)}`, { headers: { Accept: 'text/plain' } });
+    const response = await fetch(`${this.repo(input)}/diff/${encodeURIComponent(input.to)}?from=${encodeURIComponent(input.from)}`, { headers: this.headers('text/plain') });
     if (!response.ok) throw new Error(`Bitbucket 版本比较失败（${response.status}）。`);
     const patch = await response.text();
     return { from: input.from, to: input.to, path: input.path, patch, message: patch.trim() ? undefined : '这两个版本之间没有可显示的差异。' };

@@ -18,6 +18,7 @@
 /docs/<owner>/<repository>/tests/fixtures/docs/guide/advanced/plugins.md?scope=tests%2Ffixtures%2Fdocs
 /docs/<owner>/<repository>/tests/fixtures/docs/api/button.md?scope=tests%2Ffixtures%2Fdocs
 /docs/<owner>/<repository>/tests/fixtures/docs/examples/change-history.md?scope=tests%2Ffixtures%2Fdocs
+/docs/<owner>/<repository>/tests/fixtures/docs/examples/plugins.md?scope=tests%2Ffixtures%2Fdocs
 /docs/<owner>/<repository>/tests/fixtures/docs/guide/install.md/history?scope=tests%2Ffixtures%2Fdocs
 ```
 
@@ -73,17 +74,34 @@ Bitbucket Cloud 的文档空间使用 `source=bitbucket`，其中 `<owner>` 对�
 - [ ] 变更履历中第 4 个及更早版本默认收起，点击“查看更早的变更”后可展开。
 - [ ] `renderer=not-installed` 保留原始 YAML，并显示“未注册 YAML 渲染器”诊断。
 - [ ] YAML 解析失败时保留原始代码并显示解析错误，不执行文档中的 JavaScript。
+- [ ] `examples/plugins.md` 的 Mermaid flowchart 在页面内渲染为 SVG，未使用 Mermaid 的文档不会下载 Mermaid 运行时代码。
+- [ ] Mermaid 使用严格安全模式，图表中的 HTML 和点击脚本不能在宿主页面执行；语法错误会保留原始代码并显示诊断。
+- [ ] `examples/plugins.md` 的行内与块级数学公式由 KaTeX 渲染，无需页面或仓库配置。
+- [ ] 添加多个 GitHub、Bitbucket、本地文件夹和本地 Git 来源后，Sidebar 顶部只显示当前来源标题；点击后弹出其他来源并可切换。
+- [ ] 阅读页不显示来源编辑控件；设置页可统一重命名、上移、下移和移除来源，刷新后顺序、名称以及每个来源最后打开的文档、版本与目录展开状态保持不变。
+- [ ] 切换来源时只恢复该来源自己的搜索索引；本地目录句柄失效时只提示重新授权该来源，不影响其他来源。
+- [ ] iframe Demo 初始不运行，点击“运行”后计数器可用，“停止”和“重新运行”能销毁或重建 iframe 状态。
+- [ ] iframe Demo 没有 `allow-same-origin`，网络连接被 CSP 禁止，示例脚本无法读取或修改宿主页面。
 - [ ] GitHub/Bitbucket 文档页显示 `History` 入口，正文不显示 `Diff` 按钮。
 - [ ] `.../guide/install.md/history?scope=tests%2Ffixtures%2Fdocs` 能显示文件 Commit 历史；每条历史包含作者、日期和短 SHA。
 - [ ] 历史列表中的“查看该历史版本”会切换到该 Commit 的文档内容，不跳转到 GitHub/Bitbucket 原生网站。
 - [ ] 切换到历史版本后，顶栏 VERSION 显示该 Commit 的短 SHA，刷新后仍能恢复该版本内容。
-- [ ] 历史列表中的“与当前版本比较”会以当前查看版本为目标打开 Diff 页面，并显示 from/to SHA 与 unified patch。
+- [ ] 历史列表中的“与当前版本比较”会以当前查看版本为目标打开 Diff 页面，并显示 from/to SHA 与左右对齐的 Split Diff。
+- [ ] Split Diff 的删除行只出现在左栏、新增行只出现在右栏，修改行成对对齐，并分别显示旧、新行号。
+- [ ] Split Diff 不显示普通上下文行；切换“忽略空格”“忽略 Tab”“忽略空行”后，对应的纯格式差异立即隐藏。
 - [ ] 直接打开 Diff 但缺少 `from` 或 `to` 时显示明确的参数提示，不发起无效请求。
 - [ ] 两个版本没有该文件 patch 时显示“没有可显示的文件差异”，而不是把提示文本当作代码差异。
 - [ ] 本地文件夹打开 History 时显示本地模式不包含 Git 历史的提示。
 - [ ] 选择 Git 仓库根目录后，Local Provider 显示 Branch/Tag/Commit VERSION 选择器。
 - [ ] 本地 Git 仓库切换到历史 Commit 后能读取对应 Markdown 内容。
 - [ ] 本地 Git 历史页能显示 Commit 历史，并可使用“与当前版本比较”查看本地 unified diff。
+- [ ] 进入文档空间后，搜索框先显示全文索引进度；完成后输入 `button`（或 fixture 中正文的词）会立即返回当前 scope 内所有匹配文档，并展示标题、相对路径和正文摘要。
+- [ ] 点击搜索结果会打开对应文档并关闭结果面板；按 Escape 会清空搜索。
+- [ ] 每条搜索结果显示命中位置附近的多行正文预览；继续输入或删除字符时结果、预览与关键词高亮会立即更新。
+- [ ] 搜索索引由独立 Worker 构建；构建期间正文滚动、导航和搜索框输入保持响应，结果最多显示 30 条。
+- [ ] 低资源或超大文档空间超过正文预算后显示降级说明；被降级的页面仍能通过标题或路径搜索到。
+- [ ] 在线仓库刷新同一 Commit 和 scope 时复用已完成索引；切换 Commit、scope 或设备档位时不会误用旧索引。
+- [ ] 页面切换到后台标签页后暂停继续读取索引内容，恢复可见后继续；本地文件索引不会写入 IndexedDB。
 
 Phase 2 的代码级验证已通过：`tsc -b` 与 `vite build`。上面的 Provider 访问项需要在浏览器中
 使用公开仓库或本地文件夹完成验收后再勾选。
