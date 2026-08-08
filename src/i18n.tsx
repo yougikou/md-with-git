@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useDocsHostConfiguration } from './features/docs/renderers';
 
 export type Locale = 'zh-CN' | 'ja-JP' | 'en-US';
 
@@ -26,8 +27,8 @@ const I18nContext = createContext<I18n | null>(null);
 function initialLocale(): Locale {
   const stored = localStorage.getItem(storageKey) as Locale | null;
   if (stored && supportedLocales.includes(stored)) return stored;
-  const language = navigator.language.toLowerCase();
-  return language.startsWith('ja') ? 'ja-JP' : language.startsWith('zh') ? 'zh-CN' : 'en-US';
+  const language = (navigator.languages[0] || navigator.language).toLowerCase();
+  return language.startsWith('ja') ? 'ja-JP' : language.startsWith('en') ? 'en-US' : 'zh-CN';
 }
 
 export function I18nProvider({ children }: { children: ReactNode }) {
@@ -45,5 +46,7 @@ export function useI18n(): I18n {
 
 export function LanguageSwitcher({ className = '' }: { className?: string }) {
   const { locale, setLocale, t } = useI18n();
-  return <label className={`language-switcher ${className}`}><span className="sr-only">{t('language')}</span><select value={locale} onChange={(event) => setLocale(event.target.value as Locale)} aria-label={t('language')}><option value="zh-CN">中文</option><option value="ja-JP">日本語</option><option value="en-US">English</option></select></label>;
+  const { theme, setTheme } = useDocsHostConfiguration();
+  const nextTheme = theme === 'light' ? 'dark' : 'light';
+  return <span className={`appearance-switchers ${className}`}><label className="language-switcher"><span className="sr-only">{t('language')}</span><select value={locale} onChange={(event) => setLocale(event.target.value as Locale)} aria-label={t('language')}><option value="zh-CN">中文</option><option value="ja-JP">日本語</option><option value="en-US">English</option></select></label><button type="button" className="theme-switcher" onClick={() => setTheme(nextTheme)} aria-label={nextTheme === 'dark' ? '切换到暗色主题' : '切换到亮色主题'} title={nextTheme === 'dark' ? '切换到暗色主题' : '切换到亮色主题'}>{theme === 'light' ? '☾' : '☀'}</button></span>;
 }

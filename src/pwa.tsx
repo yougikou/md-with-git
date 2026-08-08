@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useI18n, type Locale } from './i18n';
 
 type BeforeInstallPromptEvent = Event & {
@@ -6,10 +6,10 @@ type BeforeInstallPromptEvent = Event & {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
 };
 
-const pwaMessages: Record<Locale, { offline: string; installNotice: string; install: string; updateNotice: string; update: string }> = {
-  'zh-CN': { offline: '当前处于离线状态；已打开的内容仍可继续浏览。', installNotice: '将 Git MD Viewer 安装到此设备。', install: '安装应用', updateNotice: '已有新版本可用。', update: '立即更新' },
-  'ja-JP': { offline: '現在オフラインです。すでに開いた内容は引き続き閲覧できます。', installNotice: 'Git MD Viewer をこのデバイスにインストールします。', install: 'アプリをインストール', updateNotice: '新しいバージョンを利用できます。', update: '今すぐ更新' },
-  'en-US': { offline: 'You are offline. Previously opened content remains available.', installNotice: 'Install Git MD Viewer on this device.', install: 'Install app', updateNotice: 'A new version is available.', update: 'Update now' },
+const pwaMessages: Record<Locale, { offline: string; installNotice: string; install: string; updateNotice: string; update: string; later: string; updating: string }> = {
+  'zh-CN': { offline: '当前处于离线状态；已打开的内容仍可继续浏览。', installNotice: '将 Git MD Viewer 安装到此设备。', install: '安装应用', updateNotice: '已有新版本可用。', update: '立即更新', later: '稍后', updating: '正在更新并刷新…' },
+  'ja-JP': { offline: '現在オフラインです。すでに開いた内容は引き続き閲覧できます。', installNotice: 'Git MD Viewer をこのデバイスにインストールします。', install: 'アプリをインストール', updateNotice: '新しいバージョンを利用できます。', update: '今すぐ更新', later: '後で', updating: '更新して再読み込みしています…' },
+  'en-US': { offline: 'You are offline. Previously opened content remains available.', installNotice: 'Install Git MD Viewer on this device.', install: 'Install app', updateNotice: 'A new version is available.', update: 'Update now', later: 'Later', updating: 'Updating and refreshing…' },
 };
 
 function canUseServiceWorker(): boolean {
@@ -32,25 +32,28 @@ export function PwaControls() {
   const copy = pwaMessages[locale];
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [updateWorker, setUpdateWorker] = useState<ServiceWorker | null>(null);
+  const [updateDeferred, setUpdateDeferred] = useState(false);
+  const [updating, setUpdating] = useState(false);
   const [online, setOnline] = useState(navigator.onLine);
+  const shouldReload = useRef(false);
 
   useEffect(() => {
     if (!canUseServiceWorker()) return;
     let reloading = false;
-    const onControllerChange = () => { if (!reloading) { reloading = true; window.location.reload(); } };
+    const onControllerChange = () => { if (shouldReload.current && !reloading) { reloading = true; window.location.reload(); } };
     const onBeforeInstallPrompt = (event: Event) => { event.preventDefault(); setInstallPrompt(event as BeforeInstallPromptEvent); };
     const onAppInstalled = () => setInstallPrompt(null);
     const onOnline = () => setOnline(true);
     const onOffline = () => setOnline(false);
 
     navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js?version=${__PWA_BUILD_ID__}`, { updateViaCache: 'none' }).then((registration) => {
-      if (registration.waiting) setUpdateWorker(registration.waiting);
+      if (registration.waiting) { setUpdateWorker(registration.waiting); setUpdateDeferred(false); }
       navigator.serviceWorker.ready.then(cacheCurrentAppResources);
       registration.addEventListener('updatefound', () => {
         const worker = registration.installing;
         if (!worker) return;
         worker.addEventListener('statechange', () => {
-          if (worker.state === 'installed' && navigator.serviceWorker.controller) setUpdateWorker(worker);
+          if (worker.state === 'installed' && navigator.serviceWorker.controller) { setUpdateWorker(worker); setUpdateDeferred(false); }
         });
       });
     }).catch(() => { /* The page remains usable when service workers are unavailable. */ });
@@ -76,9 +79,17 @@ export function PwaControls() {
     setInstallPrompt(null);
   };
 
+  const applyUpdate = () => {
+    if (!updateWorker) return;
+    shouldReload.current = true;
+    setUpdating(true);
+    updateWorker.postMessage({ type: 'SKIP_WAITING' });
+  };
+
   return <aside className="pwa-controls" aria-live="polite">
     {!online && <div className="pwa-notice pwa-offline">{copy.offline}</div>}
     {installPrompt && <div className="pwa-notice"><span>{copy.installNotice}</span><button type="button" onClick={install}>{copy.install}</button></div>}
-    {updateWorker && <div className="pwa-notice"><span>{copy.updateNotice}</span><button type="button" onClick={() => updateWorker.postMessage({ type: 'SKIP_WAITING' })}>{copy.update}</button></div>}
+    {updating && <div className="pwa-notice" role="status">{copy.updating}</div>}
+    {updateWorker && !updateDeferred && !updating && <div className="pwa-notice"><span>{copy.updateNotice}</span><span className="pwa-actions"><button type="button" className="pwa-later" onClick={() => setUpdateDeferred(true)}>{copy.later}</button><button type="button" onClick={applyUpdate}>{copy.update}</button></span></div>}
   </aside>;
 }

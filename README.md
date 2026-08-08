@@ -88,14 +88,31 @@ import { ChangeHistoryRenderer } from './docs-renderers';
 const registry = createDocsRendererRegistry();
 registry.registerYamlRenderer('change-history', ChangeHistoryRenderer);
 
+const branding = {
+  appName: 'Acme 文档中心',
+  mark: 'AC',
+  document: { icon: { src: '/brand/document-icon.svg', alt: 'Acme' } },
+  settings: { image: { src: '/brand/settings-banner.png', alt: 'Acme 文档中心' } },
+};
+
+const themeColors = {
+  light: { pageBackground: '#f8fafc', surface: '#ffffff', accent: '#2563eb' },
+  dark: { pageBackground: '#0f172a', surface: '#172033', text: '#e5eefb', accent: '#60a5fa' },
+};
+
 export function App() {
   return (
-    <DocsRendererProvider registry={registry}>
+    <DocsRendererProvider registry={registry} theme="dark" themeColors={themeColors} branding={branding}>
       {/* 在此挂载产品自己的路由与 Viewer 路由 */}
     </DocsRendererProvider>
   );
 }
 ```
+
+`theme` 可选 `light`（默认）或 `dark`，文档顶栏提供亮/暗切换按钮。`themeColors` 可为两种主题分别覆盖
+页面背景、表面、文本、边框、强调色、焦点环和代码背景等颜色令牌。`branding.document.icon`（优先）或
+`branding.document.image` 用于文档页面顶栏；`branding.settings.image` 显示在来源设置页。每项图片都需要
+提供可访问的 `alt` 文本。
 
 在当前版本中，可将内置 `src/main.tsx` 作为宿主起点，或在 monorepo 内直接复用 `src/features/docs/`。不要在未发布的入口出现前，把上面的包导入用于生产构建。
 

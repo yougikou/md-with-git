@@ -4,14 +4,15 @@ import { BrowserRouter, Link, Route, Routes, useNavigate, useSearchParams } from
 import { collectDirectoryFiles, LocalFolderPicker, type LocalDirectoryHandle, type LocalFolderSelection } from './features/docs/LocalFolderPicker';
 import { loadLocalFolderHandles } from './features/docs/localPersistence';
 import { LocalScopeTree } from './features/docs/LocalScopeTree';
-import { registerLocalFolder, registerLocalGitRepository } from './features/docs/providers';
-import { DocsRendererProvider, createDocsRendererRegistry } from './features/docs/renderers';
+import { BrandMark, SettingsBrandImage } from './features/docs/Branding';
+import { BitbucketProvider, getLocalFolder, GitHubProvider, registerLocalFolder, registerLocalGitRepository } from './features/docs/providers';
+import { DocsRendererProvider, createDocsRendererRegistry, useDocsHostConfiguration } from './features/docs/renderers';
 import { MermaidRenderer } from './features/docs/renderers/MermaidRenderer';
 import { IframeDemoRenderer } from './features/docs/renderers/IframeDemoRenderer';
 import { loadLocalFolderSettings, loadLocalGitSettings, loadOnlineRepositorySettings, saveLocalFolderSettings, saveLocalGitSettings, saveOnlineRepositorySettings } from './features/docs/setupPersistence';
 import { loadWorkspaceSources, moveWorkspaceSource, removeWorkspaceSource, saveWorkspaceSource, updateWorkspaceSource, workspaceSourceHref } from './features/docs/workspaceSources';
 import type { WorkspaceSource } from './features/docs/workspaceSources';
-import { getRepositoryAccessToken, setRepositoryAccessToken } from './features/docs/accessTokens';
+import { activateRepositoryAccessToken, getRepositoryAccessToken, setRepositoryAccessToken } from './features/docs/accessTokens';
 import { ChangeHistoryRenderer } from '../examples/standalone-host/src/docs-renderers';
 import { I18nProvider, LanguageSwitcher, useI18n } from './i18n';
 import { PwaControls } from './pwa';
@@ -23,9 +24,11 @@ const routerBaseName = import.meta.env.BASE_URL.replace(/\/$/, '') || '/';
 
 function Loading() {
   const { t } = useI18n();
+  const { branding } = useDocsHostConfiguration();
   return (
     <div className="app-loading">
-      <div className="brand-mark">MD</div>
+      <BrandMark />
+      <strong>{branding.appName}</strong>
       <p>{t('loadingViewer')}</p>
     </div>
   );
@@ -68,7 +71,7 @@ function RepositoryForm() {
 
   const changeSource = (value: 'github' | 'bitbucket') => { setSource(value); setTokenInput(getRepositoryAccessToken(value, owner.trim(), repository.trim()) || ''); };
 
-  return <section className="setup-card repository-form-card"><div className="repository-form-heading"><div><span className="eyebrow">OPEN A DOC SPACE</span><h2>{t('onlineRepository')}</h2></div><span className="form-hint">{t('formHintRepository')}</span></div><form onSubmit={openRepository}><div className="repository-form-grid"><label><span>{t('source')}</span><select value={source} onChange={(event) => changeSource(event.target.value as 'github' | 'bitbucket')}><option value="github">GitHub</option><option value="bitbucket">Bitbucket Cloud</option></select></label><label><span>{source === 'github' ? 'Owner' : t('workspace')}</span><input value={owner} onChange={(event) => setOwner(event.target.value)} placeholder={source === 'github' ? t('ownerExample') : t('workspaceExample')} required /></label><label><span>{t('repository')}</span><input value={repository} onChange={(event) => setRepository(event.target.value)} placeholder={t('repoExample')} required /></label><label><span>{t('documentDirectory')}</span><input value={scope} onChange={(event) => setScope(event.target.value)} placeholder={t('docsExample')} required /></label><label><span>{t('optionalBranch')}</span><input value={ref} onChange={(event) => setRef(event.target.value)} placeholder={t('defaultBranch')} /></label><label className="access-token-field"><span>{t('accessToken')}</span><input type="password" value={accessToken} onChange={(event) => setTokenInput(event.target.value)} placeholder={source === 'github' ? 'GitHub fine-grained PAT' : 'Bitbucket repository access token'} autoComplete="off" /></label><div className="repository-form-actions"><button className="button button-quiet repository-submit" type="submit" value="add">{t('add')}</button><button className="button button-primary repository-submit" type="submit" value="open">{t('open')} <span>→</span></button></div></div><p className="access-token-note">{t('tokenNote')}</p></form></section>;
+  return <section className="setup-card repository-form-card"><div className="repository-form-heading"><div><span className="eyebrow">OPEN A DOC SPACE</span><h2>{t('onlineRepository')}</h2></div><span className="form-hint">{t('formHintRepository')}</span></div><form onSubmit={openRepository}><div className="repository-form-top-row"><select value={source} onChange={(event) => changeSource(event.target.value as 'github' | 'bitbucket')} aria-label={t('source')}><option value="github">GitHub</option><option value="bitbucket">Bitbucket Cloud</option></select><div className="repository-form-actions"><button className="button button-quiet repository-submit" type="submit" value="add">{t('add')}</button><button className="button button-primary repository-submit" type="submit" value="open">{t('open')} <span>→</span></button></div></div><div className="repository-form-grid"><label><span>{source === 'github' ? 'Owner' : t('workspace')}</span><input value={owner} onChange={(event) => setOwner(event.target.value)} placeholder={source === 'github' ? t('ownerExample') : t('workspaceExample')} required /></label><label><span>{t('repository')}</span><input value={repository} onChange={(event) => setRepository(event.target.value)} placeholder={t('repoExample')} required /></label><label><span>{t('documentDirectory')}</span><input value={scope} onChange={(event) => setScope(event.target.value)} placeholder={t('docsExample')} required /></label><label><span>{t('optionalBranch')}</span><input value={ref} onChange={(event) => setRef(event.target.value)} placeholder={t('defaultBranch')} /></label><label className="access-token-field"><span>{t('accessToken')}</span><input type="password" value={accessToken} onChange={(event) => setTokenInput(event.target.value)} placeholder={source === 'github' ? 'GitHub fine-grained PAT' : 'Bitbucket repository access token'} autoComplete="off" /></label></div><p className="access-token-note">{t('tokenNote')}</p></form></section>;
 }
 
 function localSelectionPath(item: LocalFolderSelection): string {
@@ -214,11 +217,37 @@ function sourceKindLabel(source: WorkspaceSource, localFolder: string, localGit:
   return source.kind === 'bitbucket' ? 'Bitbucket' : 'GitHub';
 }
 
+type DiagnosticResult = { status: 'idle' | 'running' | 'success' | 'error'; message: string };
+
+async function diagnoseSource(source: WorkspaceSource): Promise<string> {
+  const isLocal = source.kind === 'local-folder' || source.kind === 'local-git';
+  const localProvider = isLocal ? getLocalFolder(source.localId || null, source.kind === 'local-git' ? 'git' : 'folder') : undefined;
+  if (isLocal && !localProvider) throw new Error('本地访问会话已失效，请重新选择文件夹并保存来源。');
+  if (source.kind === 'local-git' && !(await localProvider!.isGitRepository())) throw new Error('未检测到 .git/HEAD，请重新选择 Git 项目文件夹。');
+  if (!isLocal && !source.scope) throw new Error('在线来源缺少文档目录 scope。');
+  if (source.kind === 'github' || source.kind === 'bitbucket') activateRepositoryAccessToken(source.kind, source.owner, source.repository);
+  const provider = localProvider || (source.kind === 'bitbucket' ? new BitbucketProvider() : new GitHubProvider());
+  const refs = await provider.getRefs({ owner: source.owner, repository: source.repository, ref: source.ref, rootPath: source.scope });
+  const ref = source.ref || refs.find((item) => item.isDefault)?.name || refs[0]?.name;
+  const entries = await provider.getTree({ owner: source.owner, repository: source.repository, ref, rootPath: source.scope });
+  const documents = entries.filter((entry) => entry.type === 'file' && /\.mdx?$/i.test(entry.path)).length;
+  return `连接正常 · 已读取 ${documents} 个 Markdown 文档${ref ? ` · ${ref}` : ''}`;
+}
+
 function WorkspaceSourceRow({ source, index, total, onChange, onMove, onRemove, onOpen }: { source: WorkspaceSource; index: number; total: number; onChange: (label: string) => void; onMove: (offset: -1 | 1) => void; onRemove: () => void; onOpen: () => void }) {
   const { t } = useI18n();
   const [label, setLabel] = useState(source.label);
+  const [diagnostic, setDiagnostic] = useState<DiagnosticResult>({ status: 'idle', message: '' });
   useEffect(() => { setLabel(source.label); }, [source.label]);
-  return <article className="workspace-settings-row"><div className="workspace-settings-source"><span className="workspace-kind-badge">{sourceKindLabel(source, t('localFolderName'), t('localGitLabel'))}</span><div><strong>{source.label}</strong><small>{source.kind === 'local-folder' || source.kind === 'local-git' ? source.scope || t('localFolderSource') : `${source.owner}/${source.repository}${source.scope ? ` · ${source.scope}` : ''}`}</small></div></div><div className="workspace-settings-edit"><input value={label} onChange={(event) => setLabel(event.target.value)} aria-label={t('displayName', { name: source.label })} /><button type="button" onClick={() => onChange(label.trim())} disabled={!label.trim() || label.trim() === source.label}>{t('save')}</button></div><div className="workspace-settings-actions"><button type="button" onClick={() => onMove(-1)} disabled={index === 0} aria-label={t('moveUp')}>↑</button><button type="button" onClick={() => onMove(1)} disabled={index === total - 1} aria-label={t('moveDown')}>↓</button><button type="button" onClick={onOpen}>{t('open')}</button><button type="button" className="danger" onClick={onRemove}>{t('remove')}</button></div></article>;
+  const runDiagnostic = async () => {
+    setDiagnostic({ status: 'running', message: '正在诊断连接…' });
+    try {
+      setDiagnostic({ status: 'success', message: await diagnoseSource(source) });
+    } catch (reason) {
+      setDiagnostic({ status: 'error', message: reason instanceof Error ? reason.message : '连接诊断失败。' });
+    }
+  };
+  return <article className="workspace-settings-row"><div className="workspace-settings-source"><span className="workspace-kind-badge">{sourceKindLabel(source, t('localFolderName'), t('localGitLabel'))}</span><div><strong>{source.label}</strong><small>{source.kind === 'local-folder' || source.kind === 'local-git' ? source.scope || t('localFolderSource') : `${source.owner}/${source.repository}${source.scope ? ` · ${source.scope}` : ''}`}</small>{diagnostic.status !== 'idle' && <output className={`source-diagnostic ${diagnostic.status}`} aria-live="polite">{diagnostic.message}</output>}</div></div><div className="workspace-settings-edit"><input value={label} onChange={(event) => setLabel(event.target.value)} aria-label={t('displayName', { name: source.label })} /><button type="button" onClick={() => onChange(label.trim())} disabled={!label.trim() || label.trim() === source.label}>{t('save')}</button></div><div className="workspace-settings-actions"><button type="button" onClick={runDiagnostic} disabled={diagnostic.status === 'running'}>{diagnostic.status === 'running' ? '诊断中…' : diagnostic.status === 'error' ? '重试连接' : '诊断连接'}</button><button type="button" onClick={() => onMove(-1)} disabled={index === 0} aria-label={t('moveUp')}>↑</button><button type="button" onClick={() => onMove(1)} disabled={index === total - 1} aria-label={t('moveDown')}>↓</button><button type="button" onClick={onOpen}>{t('open')}</button><button type="button" className="danger" onClick={onRemove}>{t('remove')}</button></div></article>;
 }
 
 function WorkspaceSettings() {
@@ -235,6 +264,7 @@ function WorkspaceSettings() {
 
 function HomePage() {
   const { t } = useI18n();
+  const { branding } = useDocsHostConfiguration();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const isLocalGitSetup = searchParams.get('mode') === 'local-git';
@@ -244,7 +274,7 @@ function HomePage() {
     <main className="landing-shell">
       <div className="landing-glow" />
       <nav className="landing-nav">
-        <Link to="/" className="brand"><span className="brand-mark">MD</span> Git MD Viewer</Link>
+        <Link to="/" className="brand"><BrandMark /> {branding.appName}</Link>
         <LanguageSwitcher />
       </nav>
       <section className="hero">
@@ -258,6 +288,7 @@ function HomePage() {
           <Link className="button button-quiet" to="/?mode=repository">{t('onlineRepository')} <span>↗</span></Link>
         </div>
         <div className="local-mode-note"><span className="eyebrow">{t('localMode')}</span><span>{t('localNote')}</span></div>
+        <SettingsBrandImage />
         {isLocalFolderSetup ? <LocalFolderSetup /> : isLocalGitSetup ? <LocalGitRepositorySetup /> : <RepositoryForm />}
         <WorkspaceSettings />
       </section>
