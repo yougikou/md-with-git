@@ -11,6 +11,7 @@
 
       const output = document.querySelector('#result');
       const service = new URLSearchParams(location.search).get('service') || 'http://127.0.0.1:4180';
+      const verifyHistory = new URLSearchParams(location.search).get('history') === '1';
       let stage = '准备文件索引';
 
       try {
@@ -27,11 +28,33 @@
         const refs = await repository.getRefs();
         stage = '遍历文档树';
         const files = await repository.listFiles();
-        const document = files.find((path) => path.startsWith('docs/') && path.endsWith('.md'));
+        let document = files.find((path) => path.startsWith('docs/') && path.endsWith('.md'));
         if (!document) throw new Error('HEAD 中没有 Markdown 文档。');
+        let commits = [];
+        if (verifyHistory) {
+          stage = '定位有历史的 Markdown 文档';
+          for (const candidate of files.filter((path) => path.startsWith('docs/') && path.endsWith('.md'))) {
+            const candidateCommits = await repository.log(candidate, undefined, 10);
+            if (candidateCommits.length >= 2) {
+              document = candidate;
+              commits = candidateCommits;
+              break;
+            }
+          }
+          if (commits.length < 2) throw new Error('测试仓库中至少需要一个有两个 Commit 的 Markdown 文件。');
+        }
         stage = '读取 Markdown 文档';
         const contents = await repository.readFile(document);
-        output.textContent = JSON.stringify({ ok: true, refs: refs.length, files: files.length, document, bytes: contents.byteLength }, null, 2);
+        let history = 0;
+        let patch = false;
+        if (verifyHistory) {
+          stage = '读取文件历史';
+          history = commits.length;
+          stage = '比较文件历史';
+          patch = Boolean((await repository.compare(document, commits[1].oid, commits[0].oid)).patch.trim());
+          if (!patch) throw new Error('测试仓库的两个历史版本没有产生 Diff。');
+        }
+        output.textContent = JSON.stringify({ ok: true, refs: refs.length, files: files.length, document, bytes: contents.byteLength, history, patch }, null, 2);
       } catch (error) {
         output.textContent = JSON.stringify({ ok: false, stage, message: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined }, null, 2);
       }

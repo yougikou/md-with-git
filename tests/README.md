@@ -118,7 +118,31 @@ Phase 3 第一批的代码级验证已通过：`tsc -b` 与 `vite build`。YAML 
 确认数据可被读取，排序能力留到后续实现。
 ## 本地 Git 浏览器端回归
 
-该工具只读指定仓库的 `.git` 和文档目录；不会复制、写入或缓存目标仓库的文件。它用于在真实浏览器中验证本地 Git Provider。
+### 本地文件夹巡检样例
+
+选择 `tests/fixtures/local-documents` 目录，可通过“选择本地文档文件夹”完成不依赖网络的阅读页巡检。
+它包含首页、深层 Markdown、相对 SVG、GFM 表格/任务列表、Mermaid、KaTeX 和安全 YAML 降级。
+普通本地文件夹不包含 Git 历史，进入 History 时应显示本地模式提示。
+
+### 本地 Git 巡检样例
+
+以下命令会在系统临时目录创建一个全新的只读测试仓库；其中 `docs/` 有两个 Commit，第二次提交会
+更新 `guides/getting-started.md` 并添加 CHANGELOG。命令会输出可在设置页选择的仓库根目录与 `scope`：
+
+```powershell
+node tests/create-local-git-fixture.mjs
+```
+
+在应用中选择输出的仓库根目录，并填写 `docs` 作为 scope。应验证当前文档、版本选择器、文件 History、
+历史版本与 Diff；临时目录可在测试完成后由系统清理。
+
+下面的完整命令会启动临时本地服务和 Chromium，自动验证 refs、文档树、正文、两个 Commit 的文件历史和 Diff：
+
+```powershell
+node tests/run-local-git-browser-regression.mjs
+```
+
+该工具只读测试仓库的 `.git` 和文档目录；不会复制、写入或缓存用户选择的项目。它用于在真实浏览器中验证本地 Git Provider。
 
 ```powershell
 node tests/local-git-browser-server.mjs E:\develop\code-prism docs

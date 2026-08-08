@@ -12,6 +12,12 @@
   },
   "scripts": {
     "dev": "vite",
+    "typecheck": "tsc -b",
+    "test:fixtures": "node tests/verify-fixtures.mjs",
+    "test:github-provider": "node tests/github-provider-asset-route.mjs",
+    "test:local-folder": "node tests/local-folder-provider.mjs",
+    "test:local-git": "node tests/run-local-git-browser-regression.mjs",
+    "check": "pnpm typecheck && pnpm test:fixtures && pnpm test:github-provider && pnpm test:local-folder",
     "build": "tsc -b && vite build",
     "preview": "vite preview"
   },

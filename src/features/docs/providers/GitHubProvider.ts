@@ -10,6 +10,7 @@ interface GitHubContent {
   size?: number;
   content?: string;
   encoding?: string;
+  download_url?: string | null;
 }
 
 interface GitHubCommit {
@@ -79,7 +80,11 @@ export class GitHubProvider implements RepositoryProvider {
 
   async getAssetUrl(input: AssetQuery): Promise<string> {
     const query = input.ref ? `?ref=${encodeURIComponent(input.ref)}` : '';
-    const response = await fetch(`${this.repo(input)}/contents/${input.path.split('/').map(encodeURIComponent).join('/')}${query}`, { headers: this.headers('application/vnd.github.raw') });
+    // Keep the Contents API response JSON-only. Fetching this same endpoint with a raw
+    // media type can poison a browser cache entry subsequently used by getFile().
+    const data = await this.request<GitHubContent>(`${this.repo(input)}/contents/${input.path.split('/').map(encodeURIComponent).join('/')}${query}`);
+    if (data.type !== 'file' || !data.download_url) throw new Error('请求的路径不是可读取的资源文件。');
+    const response = await fetch(data.download_url, { headers: this.headers('application/octet-stream') });
     if (!response.ok) throw new Error(`GitHub 资源读取失败（${response.status}）。`);
     return URL.createObjectURL(await response.blob());
   }

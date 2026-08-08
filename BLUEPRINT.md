@@ -603,3 +603,49 @@ Phase 5 插件第一批以“零用户配置、浏览器内执行、内容仓库
 后续零配置插件推荐顺序：原生 admonition/tabs、严格 JSON/YAML schema 的 ECharts、Markmap。
 继续禁止 `eval`、文档内 JavaScript、远程模块导入和可执行回调；图表数据只能是
 声明式数据。PlantUML 等默认依赖服务器或本机 Java 的方案不进入内置插件范围。
+
+## 17. 稳定化迭代与待审查功能建议
+
+### 第一轮质量护栏（2026-08-08）
+
+这一轮不修改应用运行逻辑、不改变数据模型或现有交互。目标是让既有能力更容易验证、回归和记录问题：
+
+- `pnpm check`：执行 TypeScript 类型检查与测试夹具契约检查；
+- `pnpm test:fixtures`：确认关键 fixture 文件和 Markdown/GFM、相对资源、YAML renderer、Mermaid、KaTeX、iframe demo 标记仍然存在；
+- `pnpm test:github-provider`：模拟 GitHub 响应，验证资源读取不会与 Markdown 的 JSON API 响应共用 raw media type；
+- GitHub Pages 与 npm 发布工作流在构建前执行 `pnpm check`；
+- `BUGS.md` 统一记录可复现问题、严重度和对应回归覆盖。
+
+真实浏览器的本地 Git 回归仍使用 `tests/local-git-browser-server.mjs` 与
+`tests/run-local-git-browser-harness.mjs`，因为它依赖本机 Chrome 和含 `.git` 的真实测试仓库；
+暂不强制放入云端 CI，避免环境差异制造假失败。
+
+### 第二轮：已确认缺陷的最小修复（2026-08-08）
+
+发布站点画面巡检发现：GitHub 文档空间完成全文索引后，点击部分搜索结果可能将 Markdown
+原文当作 GitHub API JSON 解析。根因是资源读取与正文读取复用了同一个 GitHub Contents API URL，
+但前者请求 raw media type、后者请求 JSON；浏览器缓存可能返回错误的媒体类型。
+
+修复仅调整 GitHub Provider 的资源读取路径：先以 JSON 读取文件元数据，再从独立的下载 URL 获取
+资源 Blob。它不改变 Markdown、搜索、来源设置或 UI 行为。发布后必须按 BUG-20260808-001 的步骤复测。
+
+### 本地来源全功能巡检样例（2026-08-08）
+
+`tests/fixtures/local-documents` 是可选择的普通本地文件夹 fixture，覆盖深层路径、相对资源、GFM、
+Mermaid、KaTeX 和 YAML 安全降级。`tests/create-local-git-fixture.mjs` 会在系统临时目录生成带两个
+Commit 的本地 Git 仓库，用于验证 ref、正文、History 和 Diff。`pnpm test:local-git` 在有 Chrome 的
+开发机上运行真实 Chromium 回归；它不加入云端 CI，因为目录访问与浏览器安装路径属于机器环境。
+普通本地文件夹的 Provider 行为由 `pnpm test:local-folder` 离线覆盖，浏览器原生目录授权窗口则保留为
+`tests/README.md` 中的人工巡检步骤。
+
+### 待审查功能建议（均未实现）
+
+| 建议 | 预期收益 | 可能影响 / 审查重点 |
+| --- | --- | --- |
+| 启用 frontmatter 的 `order` 作为同级文档排序依据 | 让导航顺序可由文档维护者明确控制 | 现有按路径排序的 Sidebar 顺序会改变；需定义缺省值和重名规则 |
+| 为来源设置页增加“连接诊断 / 重试”结果 | 更快定位令牌、scope、ref、网络或权限问题 | 会新增请求与界面状态；需避免泄漏令牌或仓库私密信息 |
+| 提供可访问性与键盘导航改进（焦点、菜单、搜索结果） | 改善键盘及辅助技术用户的阅读体验 | 需完整回归移动端 Sidebar、弹出菜单与快捷键冲突 |
+| 增加 PWA 新版本提示与可控刷新 | 降低 Service Worker 更新导致的“页面不是最新版本”困惑 | 更新时机可能打断本地目录授权或未完成的索引，应明确延后策略 |
+| 审查 Mermaid 相关分包的体积与加载时机 | 当前生产构建提示最大 Mermaid 分包约 691 kB，优化可改善首次按需渲染图表时的下载体验 | 保持“仅使用 Mermaid 时才加载”与严格安全模式；不得仅通过调高 Vite 警戒线掩盖问题 |
+
+上述建议必须经过审查后才可排入实现；在获批前，稳定化工作只修复已确认缺陷或增强非运行时质量护栏。

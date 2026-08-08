@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="180" viewBox="0 0 640 180" role="img" aria-label="Local folder flow">
+  <rect width="640" height="180" rx="18" fill="#fff7ed"/>
+  <rect x="42" y="55" width="150" height="70" rx="12" fill="#fb923c"/>
+  <text x="117" y="97" text-anchor="middle" fill="white" font-family="sans-serif" font-size="19">Local folder</text>
+  <path d="M226 90h156" stroke="#334155" stroke-width="5" stroke-linecap="round"/>
+  <path d="m364 72 24 18-24 18" fill="none" stroke="#334155" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="426" y="55" width="172" height="70" rx="12" fill="#1e293b"/>
+  <text x="512" y="97" text-anchor="middle" fill="white" font-family="sans-serif" font-size="19">Markdown viewer</text>
+</svg>
