@@ -1,6 +1,8 @@
 # 独立 Viewer 宿主示例
 
-这个目录展示发布为 npm 包后的最小使用方式。宿主应用负责安装 Viewer、配置 Git 文档空间和注入渲染器；Git 文档仓库只提供 Markdown 与 YAML 数据，不提供可执行组件。
+这个目录描述 `@md-with-git/viewer` 发布公共入口后的最小宿主集成形态。当前仓库尚未提供稳定的可导入 `DocsViewer` 包入口，因此这里的包导入与深层导入均为实现目标和 API 参考，不能直接用于生产构建。
+
+宿主应用负责安装 Viewer、配置 Git 文档空间和注入渲染器；Git 文档仓库只提供 Markdown 与 YAML 数据，不提供可执行组件。当前需要二次开发时，请以根目录的 `src/main.tsx` 为宿主起点，或在 monorepo 内直接复用 `src/features/docs/`。
 
 ```bash
 pnpm add @md-with-git/viewer react react-dom react-router-dom

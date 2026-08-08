@@ -1,123 +1,200 @@
 # Git MD Viewer
 
-一个可嵌入 React 宿主应用的 Git Markdown Documentation Viewer，当前实现蓝图的 Phase 1 核心能力。
+[English](./README.en.md) · [日本語](./README.ja.md) · 简体中文
 
-## 开发
+Git MD Viewer 是一个面向产品团队的 React 文档查看器。它将 Git 仓库中**指定目录**的 Markdown 变成可浏览、可搜索、可追溯的文档空间；仓库仍是内容与历史的唯一来源，应用只负责读取、组织和渲染。
 
-```bash
-pnpm install
-pnpm dev
-```
+它适合把产品文档、工程手册、变更记录或团队知识库嵌入到已有 Web 应用，也可作为独立 PWA 使用。
 
-## 发布 npm 包
+> **发布状态**：当前仓库可直接运行完整的 Vite Viewer，并包含宿主与渲染器的实现参考。`@md-with-git/viewer` 的稳定、可导入的 `DocsViewer` 包入口仍在完善中；在该入口发布前，请将本仓库作为应用或源码集成使用，不要假定 README 中的目标包导入已可用于生产。
 
-推送与 `package.json` 中版本一致的 Git 标签（例如版本为 `0.1.0` 时推送 `v0.1.0`），会触发 GitHub Actions 构建并发布 `@md-with-git/viewer` 到 npm。发布采用 npm Trusted Publishing（OIDC），不需要在 GitHub 仓库保存 `NPM_TOKEN`。
+## 核心能力
 
-首次发布前需要：
+| 领域 | 提供的能力 |
+| --- | --- |
+| 文档空间 | 以 `scope` 限定 Git 仓库中的文档根目录；不会把整个仓库当作文档站。 |
+| 内容浏览 | 自动发现 Markdown，识别 README / index 首页，根据 frontmatter、首个 H1 与文件名生成目录。 |
+| Markdown | 支持 GFM、任务列表、表格、frontmatter、相对资源、Mermaid 和 KaTeX。 |
+| 数据源 | 支持 GitHub、Bitbucket Cloud、本地文件夹与本地 Git 仓库。 |
+| 版本信息 | Provider 协议涵盖分支/标签、文件历史和版本比较。 |
+| 搜索 | 依据设备资源自适应地为当前文档空间建立全文索引。 |
+| 宿主扩展 | 宿主可显式注册 fenced-code 与 YAML 渲染器；文档内容不能加载或执行组件。 |
+| 离线体验 | HTTPS 或 localhost 下可安装为 PWA；Service Worker 只缓存应用壳，不缓存远程仓库响应。 |
 
-1. 在 npm 创建或确认自己拥有 `@md-with-git` 组织，并确保该包名可用。
-2. 在 npmjs.com 先手动发布一次该包，或创建同名占位包；Trusted Publisher 只能为 npm 中已存在的包配置。
-3. 在 npm 包设置的 **Trusted Publisher** 中选择 GitHub Actions，并精确填写 GitHub 用户/组织、仓库名和工作流文件名 `publish-npm.yml`，允许 `npm publish`。
-4. 为 npm 帐户启用双重验证；建议在验证发布成功后，将包的 Publishing access 设为“Require two-factor authentication and disallow tokens”。
+## 文档空间模型
 
-发布前可运行 `pnpm pack --dry-run` 检查实际将上传的文件。每个 npm 版本只能发布一次；需重新发布时请先升级 `package.json` 的版本并创建相应的新标签。
-
-打开一个公开 GitHub 仓库中的文档空间，例如 Vite 的 `docs/guide`：
+一次打开操作对应一个文档空间，而不是整个仓库：
 
 ```text
 /docs/vitejs/vite/docs/guide?scope=docs%2Fguide
 /docs/vitejs/vite/docs/guide/features.md?scope=docs%2Fguide&ref=main
 ```
 
-`scope` 是要渲染的文档目录。Viewer 不把整个 Git 仓库作为浏览目标；Git 仓库只负责提供文档文件、资源和版本数据。
-
-首页的“打开 Git 仓库中的文档目录”表单支持填写 GitHub/Bitbucket、仓库和文档目录；本地文档与本地 Git 仓库使用独立入口。
-设置本地 Git 仓库时，先选择 `.git` 所在的项目根目录，再填写要渲染的文档目录 `scope`。
-
-## 访问私有仓库
-
-本项目不实施 OAuth，也不需要自建后台。使用者在“设置在线 Git 仓库”中粘贴自己的访问令牌，Viewer 在每个 API 请求中以 `Authorization: Bearer <token>` 发送它。
-
-令牌只保存到浏览器的 `sessionStorage`，并按“平台 + owner/workspace + 仓库”隔离：不会写入 URL、工作区设置或仓库配置；关闭浏览器会话后失效。它仍然是浏览器端机密，请只在受信任的设备和本站点上使用，避免将 token 写进 `.env`、源码或截图。
-
-### GitHub
-
-1. 打开 GitHub 的 [Fine-grained personal access tokens](https://github.com/settings/personal-access-tokens/new) 页面并创建令牌。
-2. 选择目标私有仓库；在 **Repository permissions** 中将 **Contents** 设为 **Read-only**。如需查看提交历史，也给 **Metadata** 读取权限（通常默认已授予）。
-3. 设置必要的过期时间，复制一次性显示的 token。
-4. 在本项目首页选择 **GitHub**，粘贴 token，填写 Owner、Repository 与文档目录，然后点击“打开”。
-
-不要使用 classic PAT 的宽泛 `repo` 权限，除非确实无法使用 fine-grained PAT。
-
-### Bitbucket Cloud
-
-推荐为每一个需要浏览的仓库单独创建 **Repository access token**：
-
-1. 在目标仓库打开 **Repository settings → Access tokens → Create access token**。
-2. 仅启用 **Repositories: Read**，并设置合适的过期时间。
-3. 复制 token；它只会显示一次。
-4. 在本项目首页选择 **Bitbucket Cloud**，粘贴 token，填写 Workspace、Repository 与文档目录，然后点击“打开”。
-
-Repository access token 只能读取创建它的仓库；若需要多个仓库，分别创建最小权限 token，首次添加对应文档源时各自填写一次即可。Bitbucket 的用户型 API token 也可使用，但权限范围通常更大，优先使用仓库级 token。
-
-## 当前能力
-
-- React Router 的 `/docs/*` 路由级动态导入
-- GitHub 公共仓库文件树与 Markdown 内容读取
-- 自动发现 `.md`，并隐藏 `_` 开头路径
-- README / index 首页识别、目录树与响应式移动端 Sidebar
-- frontmatter 标题、首个 H1 标题和文件名的解析
-- GFM 表格、任务列表、链接、引用与基础代码块
-- 当前文档空间的自适应全文搜索与实时命中预览
-- 零配置 Mermaid 图表和 KaTeX 数学公式
-- 可由宿主注册 fenced-code 与 YAML 数据渲染器的插件接口
-- 当前文档空间的自适应全文搜索与实时命中预览
-- 零配置 Mermaid 图表和 KaTeX 数学公式
-- 可由宿主注册 fenced-code 与 YAML 数据渲染器的插件接口
-- Provider 接口预留文件历史、版本比较和资源 URL
-- `tests/` 提供可推送到 GitHub 的公开仓库手动测试夹具
-- 支持 Bitbucket Cloud 文档空间、本地文件夹、本地 Git 仓库和相对资源 URL
-
-## PWA（Windows、macOS、Linux）
-
-生产环境通过 HTTPS（或 `localhost`）访问时，Git MD Viewer 可作为渐进式 Web 应用安装。首次在线打开后，应用壳和已加载的前端资源会离线可用；在线 Git 仓库内容和任何跨域请求不会被 Service Worker 缓存，以避免把可能包含访问令牌的响应写入离线缓存。
-
-- Windows：在 Microsoft Edge 或 Chrome 的地址栏/菜单中选择“安装此站点为应用”。
-- macOS：在 Safari 的“文件 → 添加到程序坞”中安装，或使用 Chrome/Edge 的“安装”菜单。
-- Linux：在 Chrome、Chromium 或 Edge 的菜单中选择“安装”。
-
-应用检测到 Chromium 浏览器的安装事件时会显示安装按钮；Safari 使用浏览器自身的安装菜单。发布时请确保站点服务器为 `/` 和 `/docs/*` 提供 SPA 回退，并以 HTTPS 提供 `sw.js`，避免对该文件设置长期缓存。新版本会在已安装的应用和浏览器页面中提示更新。
-
-项目蓝图见 [BLUEPRINT.md](./BLUEPRINT.md)。
-
-## 手动测试夹具
-
-推送仓库后，可以用下面的路径验证测试内容：
+`scope` 是文档根目录。目录树、默认首页、搜索与相对链接解析都限制在该范围内；`ref` 可指定分支或标签。这个边界让一个仓库能够承载多套彼此独立的文档。
 
 ```text
-/docs/<GitHub 用户名>/<仓库名>/tests/fixtures/docs/README.md?scope=tests%2Ffixtures%2Fdocs
+Git repository
+├── docs/guide/          ← scope
+│   ├── README.md        ← 默认首页
+│   ├── install.md
+│   └── advanced/
+└── application source   ← 不会出现在 Viewer 目录中
 ```
 
-检查项见 [tests/README.md](./tests/README.md)。
+## 快速开始：运行内置 Viewer
 
-Mermaid 与数学公式无需额外配置，直接写入 Markdown：
+要求：Node.js 22.14+，以及由 Corepack 或全局安装提供的 pnpm 11。
+
+```bash
+corepack enable
+pnpm install
+pnpm dev
+```
+
+打开首页后，可添加 GitHub / Bitbucket 文档空间，或选择本地文件夹、本地 Git 仓库。构建生产静态资源：
+
+```bash
+pnpm run build
+```
+
+部署时请为 `/` 与 `/docs/*` 配置 SPA 回退，并以 HTTPS 提供 `sw.js`。
+
+## 在宿主应用中二次开发
+
+宿主应用负责路由、登录、主题、错误边界、数据源选择和扩展注册；Git 文档仅提供内容与数据，**不能**决定要执行哪个 React 组件。
+
+推荐边界如下：
+
+```text
+Host application
+├── product routes / auth / theme / error boundary
+├── document-source setup
+├── renderer registry             ← 明确允许的扩展
+└── Viewer route
+    ├── provider reads Git/local content
+    ├── markdown parser
+    └── registered renderer only  ← never dynamic import / eval
+```
+
+仓库中的 [独立宿主示例](./examples/standalone-host/) 展示了目标集成形态。待公共包入口发布后，宿主初始化应类似：
+
+```tsx
+import {
+  DocsRendererProvider,
+  createDocsRendererRegistry,
+} from '@md-with-git/viewer';
+import { ChangeHistoryRenderer } from './docs-renderers';
+
+const registry = createDocsRendererRegistry();
+registry.registerYamlRenderer('change-history', ChangeHistoryRenderer);
+
+export function App() {
+  return (
+    <DocsRendererProvider registry={registry}>
+      {/* 在此挂载产品自己的路由与 Viewer 路由 */}
+    </DocsRendererProvider>
+  );
+}
+```
+
+在当前版本中，可将内置 `src/main.tsx` 作为宿主起点，或在 monorepo 内直接复用 `src/features/docs/`。不要在未发布的入口出现前，把上面的包导入用于生产构建。
+
+### 扩展 Markdown，而不扩展信任边界
+
+渲染器注册表把 Markdown 声明映射到由宿主编译进应用的 React 组件。它支持：
+
+- YAML fenced block：用名称选择宿主注册的结构化数据视图；
+- fenced-code block：按代码语言选择宿主注册的渲染器；
+- 返回注销函数，便于按路由、租户或功能开关管理扩展。
+
+核心类型如下：
+
+```ts
+interface YamlBlockRendererProps {
+  value: unknown;
+  context: {
+    documentPath: string;
+    repository: string;
+    ref?: string;
+    scope?: string;
+  };
+}
+
+registry.registerYamlRenderer(
+  'change-history',
+  ChangeHistoryRenderer,
+);
+
+registry.registerCodeBlockRenderer('demo', DemoRenderer);
+```
+
+例如，文档可以包含一个 `change-history` YAML 块；它只是数据与名称，只有宿主已经注册该名称时才会被渲染为组件。未知名称会回退为普通代码块并显示诊断信息。
 
 ````markdown
-```mermaid
-flowchart LR
-  A[Markdown] --> B[Diagram]
+```yaml renderer=change-history
+entries:
+  - version: 1.2.0
+    date: 2026-08-08
+    summary: Local Git support
 ```
-
-行内公式 $E = mc^2$，块级公式使用 `$$...$$`。
 ````
 
-Mermaid 与数学公式无需额外配置，直接写入 Markdown：
+扩展组件应把 YAML 当作不可信输入：先进行结构校验，再渲染；不要使用 `eval`、从 Markdown 推导模块路径，或加载远程 JavaScript。
 
-````markdown
-```mermaid
-flowchart LR
-  A[Markdown] --> B[Diagram]
+### 新增数据源 Provider
+
+数据源通过 `RepositoryProvider` 抽象。新的 Provider 应实现文件树、文件内容、资源 URL、引用、文件历史与版本比较；随后在宿主的来源配置中显式接入。
+
+```ts
+interface RepositoryProvider {
+  getTree(input: TreeQuery): Promise<RepositoryEntry[]>;
+  getFile(input: FileQuery): Promise<string>;
+  getAssetUrl(input: AssetQuery): string | Promise<string>;
+  getRefs(input: TreeQuery): Promise<RepositoryRef[]>;
+  getFileHistory(input: HistoryQuery): Promise<Commit[]>;
+  compare(input: CompareQuery): Promise<DiffResult>;
+}
 ```
 
-行内公式 $E = mc^2$，块级公式使用 `$$...$$`。
-````
+现有实现可作为参考：[GitHubProvider](./src/features/docs/providers/GitHubProvider.ts)、[BitbucketProvider](./src/features/docs/providers/BitbucketProvider.ts) 与本地 Provider。Provider 层应只读取用户授权的内容，并将令牌、缓存和错误处理与 UI 分离。
+
+## 私有仓库与安全
+
+项目不提供 OAuth，也不要求后端。用户可以在 Viewer 中粘贴自己的访问令牌；令牌以 `Authorization: Bearer <token>` 发送，并只保存在浏览器 `sessionStorage`，按“平台 + owner/workspace + 仓库”隔离。它不会进入 URL、工作区设置或 Service Worker 缓存。
+
+- GitHub：优先使用 Fine-grained PAT，仅授予目标仓库的 **Contents: Read-only**；需要历史时保留 **Metadata** 读取权限。
+- Bitbucket Cloud：优先为每个仓库创建只含 **Repositories: Read** 的 Repository access token。
+- 令牌仍是浏览器端机密；仅在受信任的设备与站点使用，绝不要提交到源码、`.env` 或截图。
+
+## 项目结构
+
+```text
+src/
+├── main.tsx                    # 内置宿主应用和路由
+├── features/docs/
+│   ├── DocsPage.tsx             # 文档空间路由与界面
+│   ├── providers/               # GitHub、Bitbucket、local Provider
+│   ├── renderers/               # 安全的宿主扩展注册表
+│   ├── search.ts                # 当前 scope 的全文搜索
+│   └── workspaceSources.ts      # 已保存的文档空间
+examples/standalone-host/        # 目标宿主集成示例
+tests/fixtures/docs/             # 可公开托管的手工测试夹具
+```
+
+## 验证与发布
+
+运行打包前检查：
+
+```bash
+pnpm pack --dry-run
+```
+
+推送与 `package.json` 版本相同的标签（例如 `v0.1.0`）会触发 [npm 发布工作流](./.github/workflows/publish-npm.yml)。该工作流使用 npm Trusted Publishing（OIDC），无需在 GitHub 保存长期 `NPM_TOKEN`。首次发布需先手动创建 npm 包，之后在 npm 包设置中把 `yougikou/md-with-git` 的 `publish-npm.yml` 配置为 Trusted Publisher。
+
+每个 npm 版本只能发布一次。发布前请确认包导出入口已就绪；当前版本的重点是 Viewer 应用与宿主扩展基础，而不是稳定的库入口。
+
+## 参考
+
+- [产品与架构蓝图](./BLUEPRINT.md)
+- [独立宿主示例](./examples/standalone-host/)
+- [手工测试说明](./tests/README.md)
