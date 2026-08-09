@@ -12,6 +12,11 @@
     "forceConsistentCasingInFileNames": true,
     "module": "ESNext",
     "moduleResolution": "Bundler",
+    "baseUrl": ".",
+    "paths": {
+      "@md-with-git/viewer": ["./src/library.ts"],
+      "@md-with-git/viewer/host": ["./src/host.ts"]
+    },
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
