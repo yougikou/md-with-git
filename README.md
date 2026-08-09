@@ -6,7 +6,7 @@ Git MD Viewer 是一个面向产品团队的 React 文档查看器。它将 Git 
 
 它适合把产品文档、工程手册、变更记录或团队知识库嵌入到已有 Web 应用，也可作为独立 PWA 使用。
 
-> **发布状态**：`@md-with-git/viewer@0.1.4` 提供稳定的 `DocsViewer` 入口、轻量宿主 API 和样式入口。React、React DOM 与 React Router 是 peer dependencies，必须由宿主提供。
+> **发布状态**：`@md-with-git/viewer@0.1.5` 提供稳定的 `DocsViewer` 入口、轻量宿主 API 和样式入口。React、React DOM 与 React Router 是 peer dependencies，必须由宿主提供。
 
 ## 核心能力
 
