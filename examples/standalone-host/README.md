@@ -1,25 +1,33 @@
 # 独立 Viewer 宿主示例
 
-这个目录描述 `@md-with-git/viewer` 发布公共入口后的最小宿主集成形态。当前仓库尚未提供稳定的可导入 `DocsViewer` 包入口，因此这里的包导入与深层导入均为实现目标和 API 参考，不能直接用于生产构建。
+这是一个可运行的最小宿主集成 fixture。它固定使用 `react-router-dom@6.28.0`，并从本仓库的打包产物安装 `@md-with-git/viewer`，用于防止 Viewer 再次捆绑第二份 Router。
 
-宿主应用负责安装 Viewer、配置 Git 文档空间和注入渲染器；Git 文档仓库只提供 Markdown 与 YAML 数据，不提供可执行组件。当前需要二次开发时，请以根目录的 `src/main.tsx` 为宿主起点，或在 monorepo 内直接复用 `src/features/docs/`。
+宿主应用负责路由、配置 Git 文档空间和注入渲染器；Git 文档仓库只提供 Markdown 与 YAML 数据，不提供可执行组件。
+
+先在仓库根目录构建库，再安装并启动 fixture：
 
 ```bash
-pnpm add @md-with-git/viewer react react-dom react-router-dom
+pnpm build:lib
+pnpm --dir examples/standalone-host install
+pnpm --filter md-with-git-viewer-host-smoke dev
 ```
+
+在 `http://127.0.0.1:4175/` 打开首页后选择 **Open branded documentation**，应能进入 `/docs/*`，而不是白屏。`/mermaid-smoke` 用于在开发服务器中验证 Mermaid 的 CommonJS 依赖链。
 
 配置入口是 `src/docs-renderers.tsx`。只有宿主显式注册的组件才会被 Viewer 使用，文档中的 `renderer=change-history` 只是一个名称，不会触发动态导入、`eval` 或远程 JavaScript 加载。
 
 ```tsx
-import { DocsRendererProvider, createDocsRendererRegistry } from '@md-with-git/viewer';
-import { ChangeHistoryRenderer } from './docs-renderers';
+import { lazy, Suspense } from 'react';
+import { Route } from 'react-router-dom';
+import { DocsRendererProvider, createDocsRendererRegistry } from '@md-with-git/viewer/host';
+import '@md-with-git/viewer/styles.css';
 
+const DocsViewer = lazy(() => import('@md-with-git/viewer').then(({ DocsViewer }) => ({ default: DocsViewer })));
 const rendererRegistry = createDocsRendererRegistry();
-rendererRegistry.registerYamlRenderer('change-history', ChangeHistoryRenderer);
 
 export function App() {
-  return <DocsRendererProvider registry={rendererRegistry}>{/* Viewer routes */}</DocsRendererProvider>;
+  return <DocsRendererProvider registry={rendererRegistry}><Suspense fallback="Loading…"><Route path="/docs/*" element={<DocsViewer />} /></Suspense></DocsRendererProvider>;
 }
 ```
 
-本仓库的 `src/main.tsx` 就是这个模式的内置宿主实现。发布包补齐 `DocsViewer` 路由级 API 后，可把 `DocsPage` 替换为包导出的 Viewer 组件。
+`DocsViewer` 必须放在宿主现有的 `BrowserRouter`（或等价 Router）内，且路由路径应以 `/*` 结尾。不要为 Viewer 再创建 Router；React、React DOM 与 React Router 都由宿主以 peer dependency 提供。

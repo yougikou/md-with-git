@@ -6,7 +6,7 @@ Git MD Viewer 是一个面向产品团队的 React 文档查看器。它将 Git 
 
 它适合把产品文档、工程手册、变更记录或团队知识库嵌入到已有 Web 应用，也可作为独立 PWA 使用。
 
-> **发布状态**：当前仓库可直接运行完整的 Vite Viewer，并包含宿主与渲染器的实现参考。`@md-with-git/viewer` 的稳定、可导入的 `DocsViewer` 包入口仍在完善中；在该入口发布前，请将本仓库作为应用或源码集成使用，不要假定 README 中的目标包导入已可用于生产。
+> **发布状态**：`@md-with-git/viewer@0.1.4` 提供稳定的 `DocsViewer` 入口、轻量宿主 API 和样式入口。React、React DOM 与 React Router 是 peer dependencies，必须由宿主提供。
 
 ## 核心能力
 
@@ -76,13 +76,16 @@ Host application
     └── registered renderer only  ← never dynamic import / eval
 ```
 
-仓库中的 [独立宿主示例](./examples/standalone-host/) 展示了目标集成形态。待公共包入口发布后，宿主初始化应类似：
+仓库中的 [独立宿主示例](./examples/standalone-host/) 固定以 React Router 6.28.0 验证发布产物。宿主初始化如下：
 
 ```tsx
+import { lazy, Suspense } from 'react';
+import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import {
   DocsRendererProvider,
   createDocsRendererRegistry,
-} from '@md-with-git/viewer';
+} from '@md-with-git/viewer/host';
+import '@md-with-git/viewer/styles.css';
 import { ChangeHistoryRenderer } from './docs-renderers';
 
 const registry = createDocsRendererRegistry();
@@ -102,11 +105,13 @@ const themeColors = {
 
 export function App() {
   return (
-    <DocsRendererProvider registry={registry} theme="dark" themeColors={themeColors} branding={branding}>
-      {/* 在此挂载产品自己的路由与 Viewer 路由 */}
-    </DocsRendererProvider>
+    <DocsRendererProvider registry={registry} theme="dark" themeColors={themeColors} branding={branding}><BrowserRouter><Suspense fallback="Loading documentation…"><Routes>
+      <Route path="/docs/*" element={<DocsViewer />} />
+    </Routes></Suspense></BrowserRouter></DocsRendererProvider>
   );
 }
+
+const DocsViewer = lazy(() => import('@md-with-git/viewer').then(({ DocsViewer }) => ({ default: DocsViewer })));
 ```
 
 `theme` 可选 `light`（默认）或 `dark`，文档顶栏提供亮/暗切换按钮。`themeColors` 可为两种主题分别覆盖
@@ -114,7 +119,7 @@ export function App() {
 `branding.document.image` 用于文档页面顶栏；`branding.settings.image` 显示在来源设置页。每项图片都需要
 提供可访问的 `alt` 文本。
 
-在当前版本中，可将内置 `src/main.tsx` 作为宿主起点，或在 monorepo 内直接复用 `src/features/docs/`。不要在未发布的入口出现前，把上面的包导入用于生产构建。
+`DocsViewer` 不会创建 Router，必须挂在宿主现有 Router 的 `/docs/*` 路由下。请从 `@md-with-git/viewer/host` 静态导入配置 API，从 `@md-with-git/viewer` 懒加载 Viewer，避免把文档能力带入首页初始 chunk。
 
 ### 扩展 Markdown，而不扩展信任边界
 

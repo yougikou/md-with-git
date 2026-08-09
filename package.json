@@ -1,6 +1,6 @@
 {
   "name": "@md-with-git/viewer",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "type": "module",
   "packageManager": "pnpm@11.16.0",
   "repository": {
@@ -10,6 +10,30 @@
   "publishConfig": {
     "access": "public"
   },
+  "main": "./dist-lib/index.js",
+  "module": "./dist-lib/index.js",
+  "types": "./dist-lib/library.d.ts",
+  "files": [
+    "dist-lib",
+    "README.md",
+    "README.en.md",
+    "README.ja.md"
+  ],
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist-lib/library.d.ts",
+      "import": "./dist-lib/index.js"
+    },
+    "./host": {
+      "types": "./dist-lib/host.d.ts",
+      "import": "./dist-lib/host.js"
+    },
+    "./styles.css": "./dist-lib/styles.css",
+    "./package.json": "./package.json"
+  },
   "scripts": {
     "dev": "vite",
     "typecheck": "tsc -b",
@@ -18,7 +42,10 @@
     "test:local-folder": "node tests/local-folder-provider.mjs",
     "test:local-git": "node tests/run-local-git-browser-regression.mjs",
     "check": "pnpm typecheck && pnpm test:fixtures && pnpm test:github-provider && pnpm test:local-folder",
-    "build": "tsc -b && vite build",
+    "build:web": "tsc -b && vite build",
+    "build:lib": "vite build --config vite.lib.config.ts && tsc -p tsconfig.lib.json",
+    "build": "pnpm build:web && pnpm build:lib",
+    "prepack": "pnpm build:lib",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -26,14 +53,16 @@
     "isomorphic-git": "^1.25.0",
     "katex": "^0.18.1",
     "mermaid": "^11.16.1",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
     "react-markdown": "^9.0.1",
-    "react-router-dom": "^6.28.0",
     "rehype-katex": "^7.0.1",
     "remark-gfm": "^4.0.0",
     "remark-math": "^6.0.0",
     "yaml": "^2.7.0"
+  },
+  "peerDependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.28.0"
   },
   "devDependencies": {
     "@types/react": "^18.3.12",

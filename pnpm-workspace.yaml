@@ -1,2 +1,5 @@
+packages:
+  - examples/standalone-host
+
 allowBuilds:
   esbuild: true
