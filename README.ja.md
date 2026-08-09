@@ -8,7 +8,7 @@ Git MD Viewer は、プロダクトチーム向けの React 製ドキュメン�
 
 > **リリース状況**：`@md-with-git/viewer@0.1.5` は安定した `DocsViewer` エントリ、軽量なホスト API、スタイルシート入口を提供します。React、React DOM、React Router はホストが提供する peer dependency です。
 
-> **ホスト例**：[md-with-git-branded](https://github.com/yougikou/md-with-git-branded) · [ライブデモ](https://yougikou.github.io/md-with-git-branded/)
+> **ホスト例**：[md-with-git-branded](https://github.com/yougikou/md-with-git-branded) · [ライブデモ](https://yougikou.github.io/md-with-git-branded/)　|　**スタンドアロン例**：[ライブデモ](https://yougikou.github.io/md-with-git/)
 
 ## 主な機能
 

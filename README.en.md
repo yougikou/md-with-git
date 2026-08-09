@@ -8,7 +8,7 @@ Use it to embed product documentation, engineering handbooks, release notes, or 
 
 > **Release status:** `@md-with-git/viewer@0.1.5` provides a stable `DocsViewer` entry, a lightweight host API, and a stylesheet entry. React, React DOM, and React Router are peer dependencies supplied by the host.
 
-> **Host example:** [md-with-git-branded](https://github.com/yougikou/md-with-git-branded) · [Live demo](https://yougikou.github.io/md-with-git-branded/)
+> **Host example:** [md-with-git-branded](https://github.com/yougikou/md-with-git-branded) · [Live demo](https://yougikou.github.io/md-with-git-branded/)　|　**Standalone example:** [Live demo](https://yougikou.github.io/md-with-git/)
 
 ## What it does
 
