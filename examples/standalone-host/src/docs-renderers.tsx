@@ -1,4 +1,4 @@
-import type { YamlBlockRendererProps } from '../../../src/features/docs/renderers';
+import type { YamlBlockRendererProps } from '@md-with-git/viewer/host';
 
 interface ChangeEntry {
   version: string;

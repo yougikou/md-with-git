@@ -6,7 +6,7 @@ Git MD Viewer is a React documentation viewer for product teams. It turns a **se
 
 Use it to embed product documentation, engineering handbooks, release notes, or team knowledge bases in an existing web product, or run it as a standalone PWA.
 
-> **Release status:** This repository runs as a complete Vite Viewer and contains the host and renderer implementation references. A stable, importable `DocsViewer` entry for `@md-with-git/viewer` is still being completed. Until that entry is released, use this repository as an application or source integration; do not assume the target package imports in this README are production-ready.
+> **Release status:** `@md-with-git/viewer@0.1.4` provides a stable `DocsViewer` entry, a lightweight host API, and a stylesheet entry. React, React DOM, and React Router are peer dependencies supplied by the host.
 
 ## What it does
 
