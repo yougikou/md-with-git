@@ -7,6 +7,10 @@ title: 本地渲染器测试
 ## Mermaid
 
 ```mermaid
+---
+config:
+  layout: elk
+---
 flowchart LR
   Folder[本地文件夹] --> Viewer[Git MD Viewer]
   Viewer --> Document[Markdown 文档]

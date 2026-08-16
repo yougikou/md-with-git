@@ -5,6 +5,7 @@ import type { ImgHTMLAttributes } from 'react';
 import { useResolvedAssetUrl } from './assetUrls';
 import type { DiffResult, RepositoryProvider } from './types';
 import { useI18n } from '../../i18n';
+import { ResizableMarkdownTable, resizableMarkdownTableComponents } from './ResizableMarkdownTable';
 
 type ChangeKind = 'unchanged' | 'added' | 'removed' | 'modified';
 
@@ -125,7 +126,7 @@ function ComparisonMarkdownImage({ src, alt, provider, owner, repository, docume
 }
 
 function MarkdownBlock({ content, provider, owner, repository, documentPath, assetRef }: { content: string; provider?: RepositoryProvider; owner: string; repository: string; documentPath: string; assetRef: string }) {
-  return <div className="markdown-body diff-markdown"><ReactMarkdown remarkPlugins={[remarkGfm]} components={{ img: ({ src, alt, ...props }) => provider ? <ComparisonMarkdownImage src={src} alt={alt} provider={provider} owner={owner} repository={repository} documentPath={documentPath} assetRef={assetRef} {...props} /> : <img src={src} alt={alt || ''} {...props} /> }}>{content}</ReactMarkdown></div>;
+  return <div className="markdown-body diff-markdown"><ReactMarkdown remarkPlugins={[remarkGfm]} components={{ table: ({ node, children, ...props }) => <ResizableMarkdownTable key={`${documentPath}:${assetRef}:${node?.position?.start.offset || 0}`} tableKey={`${documentPath}:${assetRef}:${node?.position?.start.offset || 0}`} {...props}>{children}</ResizableMarkdownTable>, ...resizableMarkdownTableComponents, img: ({ src, alt, ...props }) => provider ? <ComparisonMarkdownImage src={src} alt={alt} provider={provider} owner={owner} repository={repository} documentPath={documentPath} assetRef={assetRef} {...props} /> : <img src={src} alt={alt || ''} {...props} /> }}>{content}</ReactMarkdown></div>;
 }
 
 function DocumentComparison({ before, after, provider, owner, repository, documentPath, fromRef, toRef }: { before: string; after: string; provider?: RepositoryProvider; owner: string; repository: string; documentPath: string; fromRef: string; toRef: string }) {

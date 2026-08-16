@@ -27,11 +27,15 @@ const contentRequirements = [
   ['tests/fixtures/docs/examples/change-history.md', '```yaml renderer=change-history'],
   ['tests/fixtures/docs/examples/change-history.md', '```yaml renderer=not-installed'],
   ['tests/fixtures/docs/examples/plugins.md', '```mermaid'],
+  ['tests/fixtures/docs/examples/plugins.md', 'layout: elk'],
+  ['tests/fixtures/docs/examples/plugins.md', 'nodePlacementStrategy: BRANDES_KOEPF'],
   ['tests/fixtures/docs/examples/plugins.md', '$E = mc^2$'],
   ['tests/fixtures/docs/examples/plugins.md', '```demo title="计数器 Demo"'],
   ['tests/fixtures/local-documents/README.md', './guides/getting-started.md'],
   ['tests/fixtures/local-documents/guides/getting-started.md', '![本地流程图](../assets/local-flow.svg)'],
+  ['tests/fixtures/local-documents/guides/getting-started.md', 'layout: elk'],
   ['tests/fixtures/local-documents/examples/renderers.md', '```mermaid'],
+  ['tests/fixtures/local-documents/examples/renderers.md', 'layout: elk'],
   ['tests/fixtures/local-documents/examples/renderers.md', '$a^2 + b^2 = c^2$'],
 ];
 

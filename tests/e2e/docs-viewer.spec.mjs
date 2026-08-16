@@ -63,6 +63,7 @@ test('本地 Git 文档空间支持搜索、移动目录、History 与 Diff', as
   await expect(result).toBeVisible();
   await result.click();
   await expect(page.getByRole('heading', { name: '本地文档开始使用' })).toBeVisible();
+  await expect(page.locator('.mermaid-diagram svg[aria-roledescription="flowchart-elk"]')).toBeVisible({ timeout: 30_000 });
 
   await page.setViewportSize({ width: 390, height: 844 });
   const menu = page.locator('.mobile-menu');
@@ -73,7 +74,7 @@ test('本地 Git 文档空间支持搜索、移动目录、History 与 Diff', as
   await expect(page.locator('.docs-layout')).not.toHaveClass(/sidebar-visible/);
 
   await page.setViewportSize({ width: 1280, height: 720 });
-  await page.getByRole('link', { name: 'History' }).click();
+  await page.getByRole('link', { name: '历史记录' }).click();
   await expect(page.getByText('docs: add history fixture')).toBeVisible();
   const compareLinks = page.getByRole('link', { name: '与当前版本比较' });
   await expect(compareLinks).toHaveCount(2);
