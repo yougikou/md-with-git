@@ -8,7 +8,7 @@ import { buildDocumentTree, findDocument, findFirstDocument } from './tree';
 import { parseFrontmatter } from './markdown';
 import { useResolvedAssetUrl } from './assetUrls';
 import { documentCacheKey, readMarkdownCache, readSearchIndexCache, searchIndexCacheKey, writeMarkdownCache, writeSearchIndexCache } from './cache';
-import { BitbucketProvider, getLocalFolder, GitHubProvider } from './providers';
+import { BitbucketProvider, getLocalFolder, GitHubProvider, LocalFolderPermissionError } from './providers';
 import type { DocumentNode, RepositoryEntry, RepositoryProvider, RepositoryRef, TreeNode } from './types';
 import type { ImgHTMLAttributes } from 'react';
 import { parse as parseYaml } from 'yaml';
@@ -62,9 +62,9 @@ async function readCachedDocument(provider: RepositoryProvider, owner: string, r
   return content;
 }
 
-function ErrorState({ message, actionHref = '/', actionLabel = '返回首页' }: { message: string; actionHref?: string; actionLabel?: string }) {
+function ErrorState({ message, actionHref = '/', actionLabel = '返回首页', onRetry, retrying = false }: { message: string; actionHref?: string; actionLabel?: string; onRetry?: () => void; retrying?: boolean }) {
   const { t } = useI18n();
-  return <div className="state-card error-state"><span className="state-icon">!</span><h2>{t('failedToLoad')}</h2><p>{message}</p><Link to={actionHref} className="button button-primary">{actionLabel === '返回首页' ? t('home') : actionLabel}</Link></div>;
+  return <div className="state-card error-state"><span className="state-icon">!</span><h2>{t('failedToLoad')}</h2><p>{message}</p>{onRetry && <button type="button" className="button button-primary" onClick={onRetry} disabled={retrying}>{retrying ? '正在重新授权…' : '重新授权'}</button>}<Link to={actionHref} className="button button-primary">{actionLabel === '返回首页' ? t('home') : actionLabel}</Link></div>;
 }
 
 function SidebarNode({ node, activePath, expandedPaths, onNavigate, onToggle }: { node: TreeNode; activePath: string; expandedPaths: Set<string>; onNavigate: (path: string) => void; onToggle: (path: string) => void }) {
@@ -155,6 +155,9 @@ export default function DocsPage() {
   const [contentLoading, setContentLoading] = useState(false);
   const [contentError, setContentError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [localPermissionRequired, setLocalPermissionRequired] = useState(false);
+  const [localPermissionRequesting, setLocalPermissionRequesting] = useState(false);
+  const [localPermissionNonce, setLocalPermissionNonce] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [history, setHistory] = useState<Commit[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -202,6 +205,19 @@ export default function DocsPage() {
   const activeRef = ref || defaultRef;
   const currentVersion = refs.find((item) => item.name === activeRef)?.sha || activeRef;
   const activePath = source?.path || documentPath;
+  const requestLocalReadPermission = useCallback(async () => {
+    if (!localProvider) return;
+    setLocalPermissionRequesting(true);
+    try {
+      await localProvider.requestReadPermission();
+      setLocalPermissionRequired(false); setError(null); setContentError(null); setLocalPermissionNonce((value) => value + 1);
+    } catch (reason) {
+      const message = reason instanceof Error ? reason.message : '无法重新获得本地文件夹访问权限，请重新选择文件夹。';
+      setLocalPermissionRequired(true); setError(message); setContentError(message);
+    } finally {
+      setLocalPermissionRequesting(false);
+    }
+  }, [localProvider]);
 
   useEffect(() => {
     if (activeSourceId || !owner || !repository || (sourceKind === 'local' && !localId)) return;
@@ -224,7 +240,7 @@ export default function DocsPage() {
     if (sourceKind !== 'local' && !scope) { setLoading(false); setError('请指定要渲染的文档目录，例如 ?scope=docs 或 ?scope=docs/guide。'); return; }
     if (sourceKind === 'local' && localMode === 'git' && !scope) { setLoading(false); setError('本地 Git 仓库必须指定文档目录 scope，例如 ?scope=docs。'); return; }
     let cancelled = false;
-    setLoading(true); setError(null); setSource(null);
+    setLoading(true); setError(null); setLocalPermissionRequired(false); setSource(null);
     const loadTree = async () => {
       if (localMode === 'git' && localProvider && !(await localProvider.isGitRepository())) throw new Error('未检测到所选项目根目录中的 .git/HEAD，请重新选择 Git 项目文件夹。');
       return provider.getRefs({ owner, repository, ref, rootPath: scope }).then(async (nextRefs) => {
@@ -235,9 +251,9 @@ export default function DocsPage() {
       setRefs(nextRefs); setDefaultRef(nextDefault); setTree(buildDocumentTree(nextEntries, scope || ''));
       });
     };
-    loadTree().catch((reason: unknown) => { if (!cancelled) setError(reason instanceof Error ? reason.message : '无法读取文档空间。'); }).finally(() => { if (!cancelled) setLoading(false); });
+    loadTree().catch((reason: unknown) => { if (!cancelled) { setLocalPermissionRequired(reason instanceof LocalFolderPermissionError); setError(reason instanceof Error ? reason.message : '无法读取文档空间。'); } }).finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [localMode, localProvider, owner, provider, ref, repository, scope, sourceKind]);
+  }, [localMode, localPermissionNonce, localProvider, owner, provider, ref, repository, scope, sourceKind]);
 
   const selectedDocument = useMemo(() => documentPath ? findDocument(tree, documentPath) : findFirstDocument(tree), [documentPath, tree]);
 
@@ -291,9 +307,9 @@ export default function DocsPage() {
     let cancelled = false;
     setContentLoading(true); setSource(null); setContentError(null);
     const readContent = readCachedDocument(provider, owner, repository, selectedDocument.path, currentVersion || activeRef);
-    readContent.then((content) => { if (!cancelled) setSource({ path: selectedDocument.path, content }); }).catch((reason: unknown) => { if (!cancelled) setContentError(reason instanceof Error ? reason.message : '无法读取 Markdown 文件。'); }).finally(() => { if (!cancelled) setContentLoading(false); });
+    readContent.then((content) => { if (!cancelled) setSource({ path: selectedDocument.path, content }); }).catch((reason: unknown) => { if (!cancelled) { setLocalPermissionRequired(reason instanceof LocalFolderPermissionError); setContentError(reason instanceof Error ? reason.message : '无法读取 Markdown 文件。'); } }).finally(() => { if (!cancelled) setContentLoading(false); });
     return () => { cancelled = true; };
-  }, [activeRef, currentVersion, localId, owner, provider, repository, selectedDocument, sourceKind, viewMode]);
+  }, [activeRef, currentVersion, localId, localPermissionNonce, owner, provider, repository, selectedDocument, sourceKind, viewMode]);
 
   useEffect(() => {
     if (!provider || !tree.length) return;
@@ -408,7 +424,7 @@ export default function DocsPage() {
   }, [activeRef, fromRef, owner, provider, repository, selectedDocument, toRef, viewMode]);
 
   if (loading) return <div className="docs-shell"><Topbar owner={owner} repository={repository} scope={scope} source={sourceKind} localMode={localMode} onMenu={() => setSidebarOpen(true)} /><LoadingState source={sourceKind} /></div>;
-  if (error && !tree.length) return <div className="docs-shell"><Topbar owner={owner} repository={repository} scope={scope} source={sourceKind} localMode={localMode} onMenu={() => setSidebarOpen(true)} /><ErrorState message={error} actionHref={sourceKind === 'local' ? `/?mode=${localMode === 'git' ? 'local-git' : 'local-folder'}` : '/'} actionLabel={sourceKind === 'local' ? localMode === 'git' ? '重新设置本地 Git' : '重新设置本地文档' : '返回首页'} /></div>;
+  if (error && !tree.length) return <div className="docs-shell"><Topbar owner={owner} repository={repository} scope={scope} source={sourceKind} localMode={localMode} onMenu={() => setSidebarOpen(true)} /><ErrorState message={error} actionHref={sourceKind === 'local' ? `/?mode=${localMode === 'git' ? 'local-git' : 'local-folder'}` : '/'} actionLabel={sourceKind === 'local' ? localMode === 'git' ? '重新设置本地 Git' : '重新设置本地文档' : '返回首页'} onRetry={localPermissionRequired ? requestLocalReadPermission : undefined} retrying={localPermissionRequesting} /></div>;
   if (!tree.length) return <div className="docs-shell"><Topbar owner={owner} repository={repository} scope={scope} source={sourceKind} localMode={localMode} onMenu={() => setSidebarOpen(true)} /><ErrorState message={scope ? `目录 “${scope}” 中没有发现 Markdown 文件。` : '文档空间中没有发现 Markdown 文件。'} /></div>;
   if (!selectedDocument) return <div className="docs-shell"><Topbar owner={owner} repository={repository} scope={scope} source={sourceKind} localMode={localMode} onMenu={() => setSidebarOpen(true)} /><ErrorState message="找不到请求的 Markdown 文档，请从左侧目录选择一个页面。" /></div>;
 
@@ -426,7 +442,7 @@ export default function DocsPage() {
   const isHistoricalVersion = viewMode === 'document' && searchParams.get('historyVersion') === '1';
   const hideDocumentDirectory = isHistoricalVersion || viewMode === 'history' || viewMode === 'diff';
   const diffViewError = viewMode === 'diff' && (!fromRef || !toRef) ? '请在 diff URL 中提供 from 和 to 两个版本，例如 ?from=abc123&to=def456。' : diffError;
-  const viewContent = viewMode === 'history' ? <HistoryView commits={history} loading={historyLoading} error={historyError} documentPath={selectedDocument.path} documentHref={documentHref} diffPath={diffPath} currentRef={currentVersion} sourceKind={sourceKind} /> : viewMode === 'diff' ? <DiffView diff={diff} before={comparisonBefore} after={comparisonAfter} provider={provider} owner={owner} repository={repository} documentPath={selectedDocument.path} loading={diffLoading} error={diffViewError} historyPath={historyPath} /> : contentLoading ? <div className="document-skeleton"><div /><div /><div /><div /></div> : contentError ? <div className="inline-error">{contentError}</div> : !parsed ? <div className="document-skeleton"><div /><div /><div /><div /></div> : <><div className="document-meta"><span>{selectedDocument.path}</span>{activeRef && <span className="ref-badge">{activeRef.slice(0, 12)}</span>}<span className="document-actions"><Link to={historyPath}>{isHistoricalVersion ? '返回历史一览' : 'History'}</Link></span></div><article className="markdown-body"><h1>{parsed.title}</h1><ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[[rehypeKatex, { throwOnError: false, strict: 'warn', trust: false }]]} components={{ h1: () => null, a: ({ href, children, ...props }) => <a href={href} {...props} target={href?.startsWith('http') ? '_blank' : undefined} rel={href?.startsWith('http') ? 'noreferrer' : undefined}>{children}</a>, img: ({ src, alt, ...props }) => provider ? <MarkdownImage src={src} alt={alt} provider={provider} owner={owner} repository={repository} documentPath={selectedDocument.path} assetRef={activeRef} {...props} /> : null, code: ({ className, children, node, ...props }) => { const language = className?.replace('language-', ''); const meta = readCodeMeta(node); const rendererName = language === 'yaml' ? rendererNameFromMeta(meta) : undefined; const CodeRenderer = language ? rendererRegistry.getCodeBlockRenderer(language) : undefined; const codeSource = String(children).replace(/\n$/, ''); const context = { documentPath: selectedDocument.path, repository, ref: activeRef, scope }; if (rendererName) return <YamlRendererBlock name={rendererName} source={codeSource.trim()} registry={rendererRegistry} context={context} />; if (CodeRenderer && language) return <CodeRenderer source={codeSource} language={language} meta={meta} context={context} />; return <code className={`${className || ''} code-inline`} data-language={language} {...props}>{children}</code>; } }}>{parsed.content}</ReactMarkdown></article></>;
+  const viewContent = viewMode === 'history' ? <HistoryView commits={history} loading={historyLoading} error={historyError} documentPath={selectedDocument.path} documentHref={documentHref} diffPath={diffPath} currentRef={currentVersion} sourceKind={sourceKind} /> : viewMode === 'diff' ? <DiffView diff={diff} before={comparisonBefore} after={comparisonAfter} provider={provider} owner={owner} repository={repository} documentPath={selectedDocument.path} loading={diffLoading} error={diffViewError} historyPath={historyPath} /> : contentLoading ? <div className="document-skeleton"><div /><div /><div /><div /></div> : contentError ? <div className="inline-error">{contentError}{localPermissionRequired && <button type="button" className="button button-primary" onClick={requestLocalReadPermission} disabled={localPermissionRequesting}>{localPermissionRequesting ? '正在重新授权…' : '重新授权'}</button>}</div> : !parsed ? <div className="document-skeleton"><div /><div /><div /><div /></div> : <><div className="document-meta"><span>{selectedDocument.path}</span>{activeRef && <span className="ref-badge">{activeRef.slice(0, 12)}</span>}<span className="document-actions"><Link to={historyPath}>{isHistoricalVersion ? '返回历史一览' : 'History'}</Link></span></div><article className="markdown-body"><h1>{parsed.title}</h1><ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[[rehypeKatex, { throwOnError: false, strict: 'warn', trust: false }]]} components={{ h1: () => null, a: ({ href, children, ...props }) => <a href={href} {...props} target={href?.startsWith('http') ? '_blank' : undefined} rel={href?.startsWith('http') ? 'noreferrer' : undefined}>{children}</a>, img: ({ src, alt, ...props }) => provider ? <MarkdownImage src={src} alt={alt} provider={provider} owner={owner} repository={repository} documentPath={selectedDocument.path} assetRef={activeRef} {...props} /> : null, code: ({ className, children, node, ...props }) => { const language = className?.replace('language-', ''); const meta = readCodeMeta(node); const rendererName = language === 'yaml' ? rendererNameFromMeta(meta) : undefined; const CodeRenderer = language ? rendererRegistry.getCodeBlockRenderer(language) : undefined; const codeSource = String(children).replace(/\n$/, ''); const context = { documentPath: selectedDocument.path, repository, ref: activeRef, scope }; if (rendererName) return <YamlRendererBlock name={rendererName} source={codeSource.trim()} registry={rendererRegistry} context={context} />; if (CodeRenderer && language) return <CodeRenderer source={codeSource} language={language} meta={meta} context={context} />; return <code className={`${className || ''} code-inline`} data-language={language} {...props}>{children}</code>; } }}>{parsed.content}</ReactMarkdown></article></>;
   const search = { query: searchQuery, results: searchResults, indexing, indexedCount, indexTotal, error: searchError, notice: searchNotice, onQueryChange: setSearchQuery, onResultSelect: openDocument };
   return <div className="docs-shell"><Topbar owner={owner} repository={repository} scope={scope} source={sourceKind} localMode={localMode} showMenu={!hideDocumentDirectory} onMenu={() => setSidebarOpen(true)} menuExpanded={sidebarOpen} menuButtonRef={menuButtonRef} search={search} /><div className={`docs-layout ${!hideDocumentDirectory && sidebarOpen ? 'sidebar-visible' : ''}`}>{!hideDocumentDirectory && <><button type="button" className="sidebar-backdrop" onClick={closeSidebar} aria-label="关闭目录" /><Sidebar tree={tree} activePath={activePath} expandedPaths={expandedPaths} onNavigate={openDocument} onToggle={toggleSection} sources={workspaceSources} activeSourceId={activeSourceId} onSelectSource={selectWorkspaceSource} onClose={closeSidebar} containerRef={sidebarRef} /></>}<main className="docs-main"><div className={`document-wrap ${viewMode === 'diff' ? 'diff-document-wrap' : ''}`}>{viewContent}{viewMode === 'document' && !contentLoading && !contentError && parsed && <div className="document-footer"><span>Powered by Git MD Viewer</span><span className="footer-note">{refs.length > 0 ? 'Local Git · read-only' : sourceKind === 'local' ? 'Local folder · read-only' : `${sourceKind} · ${scope}`}</span></div>}</div></main></div></div>;
 }
