@@ -39,9 +39,11 @@
     "typecheck": "tsc -b",
     "test:fixtures": "node tests/verify-fixtures.mjs",
     "test:github-provider": "node tests/github-provider-asset-route.mjs",
+    "test:github-metadata": "node tests/github-provider-metadata-cache.mjs",
+    "test:e2e": "playwright test --reporter=line",
     "test:local-folder": "node tests/local-folder-provider.mjs",
     "test:local-git": "node tests/run-local-git-browser-regression.mjs",
-    "check": "pnpm typecheck && pnpm test:fixtures && pnpm test:github-provider && pnpm test:local-folder",
+    "check": "pnpm typecheck && pnpm test:fixtures && pnpm test:github-provider && pnpm test:github-metadata && pnpm test:local-folder && pnpm test:e2e",
     "build:web": "tsc -b && vite build",
     "build:lib": "vite build --config vite.lib.config.ts && tsc -p tsconfig.lib.json",
     "build": "pnpm build:web && pnpm build:lib",
@@ -65,6 +67,7 @@
     "react-router-dom": "^6.28.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",

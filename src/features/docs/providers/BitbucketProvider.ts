@@ -2,6 +2,7 @@ import type {
   AssetQuery, Commit, CompareQuery, DiffResult, FileQuery, HistoryQuery, RepositoryEntry, RepositoryProvider, RepositoryRef, TreeQuery,
 } from '../types';
 import { getAccessToken } from '../accessTokens';
+import { createAssetUrl } from '../assetUrls';
 
 interface BitbucketPage<T> {
   values: T[];
@@ -95,7 +96,7 @@ export class BitbucketProvider implements RepositoryProvider {
     const url = `${this.repo(input)}/src/${encodeURIComponent(ref)}/${input.path.split('/').map(encodeURIComponent).join('/')}`;
     const response = await fetch(url, { headers: this.headers('application/octet-stream') });
     if (!response.ok) throw new Error(`Bitbucket 资源读取失败（${response.status}）。`);
-    return URL.createObjectURL(await response.blob());
+    return createAssetUrl(await response.blob());
   }
 
   async getFileHistory(input: HistoryQuery): Promise<Commit[]> {

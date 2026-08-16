@@ -4,6 +4,7 @@ import type {
 import type { LocalFolderSelection } from '../LocalFolderPicker';
 import { loadLocalFolderHandles, saveLocalFolderHandles } from '../localPersistence';
 import { LocalGitRepository } from './LocalGitRepository';
+import { createAssetUrl } from '../assetUrls';
 
 interface LocalFileRecord {
   file?: File;
@@ -24,7 +25,6 @@ export class LocalFolderProvider implements RepositoryProvider {
   readonly kind = 'local' as const;
   private readonly mode: LocalFolderMode;
   private readonly files = new Map<string, LocalFileRecord>();
-  private readonly objectUrls = new Map<string, string>();
   private ready: Promise<void> = Promise.resolve();
   private gitRepository?: LocalGitRepository;
   private gitDetection?: Promise<LocalGitRepository | undefined>;
@@ -140,18 +140,13 @@ export class LocalFolderProvider implements RepositoryProvider {
     const path = normalizePath(input.path);
     const file = this.files.get(path);
     const gitRepository = await this.getGitRepository();
-    const cacheKey = `${input.ref || 'HEAD'}:${path}`;
     if (!file && !gitRepository) return '';
-    const existing = this.objectUrls.get(cacheKey);
-    if (existing) return existing;
     if (gitRepository) {
       try {
         const bytes = await gitRepository.readFile(path, input.ref);
         const blobBytes = new Uint8Array(bytes.byteLength);
         blobBytes.set(bytes);
-        const url = URL.createObjectURL(new Blob([blobBytes.buffer]));
-        this.objectUrls.set(cacheKey, url);
-        return url;
+        return createAssetUrl(new Blob([blobBytes.buffer]));
       } catch {
         return '';
       }
@@ -159,14 +154,10 @@ export class LocalFolderProvider implements RepositoryProvider {
     if (!file) return '';
     const fileObject = file.file || (file.handle ? file.handle.getFile() : undefined);
     if (fileObject instanceof Promise) return fileObject.then((value) => {
-      const url = URL.createObjectURL(value);
-      this.objectUrls.set(cacheKey, url);
-      return url;
+      return createAssetUrl(value);
     });
     if (!fileObject) return '';
-    const url = URL.createObjectURL(fileObject);
-    this.objectUrls.set(cacheKey, url);
-    return url;
+    return createAssetUrl(fileObject);
   }
 
   async getFileHistory(input: HistoryQuery): Promise<Commit[]> {

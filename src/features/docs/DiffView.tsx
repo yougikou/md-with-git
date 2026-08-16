@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { ImgHTMLAttributes } from 'react';
-import { resolveAssetPath } from './markdown';
+import { useResolvedAssetUrl } from './assetUrls';
 import type { DiffResult, RepositoryProvider } from './types';
 import { useI18n } from '../../i18n';
 
@@ -120,14 +120,7 @@ export function compareMarkdownDocuments(before: string, after: string): Compari
 }
 
 function ComparisonMarkdownImage({ src, alt, provider, owner, repository, documentPath, assetRef, ...props }: ImgHTMLAttributes<HTMLImageElement> & { provider: RepositoryProvider; owner: string; repository: string; documentPath: string; assetRef: string }) {
-  const [resolvedSrc, setResolvedSrc] = useState(src);
-  useEffect(() => {
-    let cancelled = false;
-    if (!src || /^(?:[a-z]+:)?\/\//i.test(src) || src.startsWith('data:') || src.startsWith('#')) { setResolvedSrc(src); return () => { cancelled = true; }; }
-    const assetPath = resolveAssetPath(documentPath, src);
-    Promise.resolve(provider.getAssetUrl({ owner, repository, path: assetPath, ref: assetRef })).then((url) => { if (!cancelled) setResolvedSrc(url || src); });
-    return () => { cancelled = true; };
-  }, [assetRef, documentPath, owner, provider, repository, src]);
+  const resolvedSrc = useResolvedAssetUrl({ src, provider, owner, repository, documentPath, assetRef });
   return <img {...props} src={resolvedSrc} alt={alt || ''} />;
 }
 

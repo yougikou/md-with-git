@@ -5,7 +5,8 @@ import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { buildDocumentTree, findDocument, findFirstDocument } from './tree';
-import { parseFrontmatter, resolveAssetPath } from './markdown';
+import { parseFrontmatter } from './markdown';
+import { useResolvedAssetUrl } from './assetUrls';
 import { documentCacheKey, readMarkdownCache, readSearchIndexCache, searchIndexCacheKey, writeMarkdownCache, writeSearchIndexCache } from './cache';
 import { BitbucketProvider, getLocalFolder, GitHubProvider } from './providers';
 import type { DocumentNode, RepositoryEntry, RepositoryProvider, RepositoryRef, TreeNode } from './types';
@@ -50,12 +51,15 @@ async function waitUntilPageIsVisible(): Promise<void> {
   await new Promise<void>((resolve) => document.addEventListener('visibilitychange', () => resolve(), { once: true }));
 }
 
-async function readSearchSource(provider: RepositoryProvider, owner: string, repository: string, path: string, ref?: string): Promise<string> {
-  if (provider.kind === 'local') return provider.getFile({ owner, repository, path, ref });
-  const url = await provider.getAssetUrl({ owner, repository, path, ref });
-  const response = await fetch(url, { headers: { Accept: 'text/plain' } });
-  if (!response.ok) throw new Error(`全文索引读取失败（${response.status}）。`);
-  return response.text();
+async function readCachedDocument(provider: RepositoryProvider, owner: string, repository: string, path: string, ref?: string): Promise<string> {
+  const query = { owner, repository, path, ref };
+  if (provider.kind === 'local') return provider.getFile(query);
+  const cacheKey = documentCacheKey(provider.kind, query);
+  const cached = await readMarkdownCache(cacheKey);
+  if (cached !== null) return cached;
+  const content = await provider.getFile(query);
+  await writeMarkdownCache(cacheKey, content);
+  return content;
 }
 
 function ErrorState({ message, actionHref = '/', actionLabel = '返回首页' }: { message: string; actionHref?: string; actionLabel?: string }) {
@@ -98,14 +102,7 @@ function LoadingState({ source }: { source: SourceKind }) {
 }
 
 function MarkdownImage({ src, alt, provider, owner, repository, documentPath, assetRef, ...props }: ImgHTMLAttributes<HTMLImageElement> & { provider: RepositoryProvider; owner: string; repository: string; documentPath: string; assetRef?: string }) {
-  const [resolvedSrc, setResolvedSrc] = useState(src);
-  useEffect(() => {
-    let cancelled = false;
-    if (!src || /^(?:[a-z]+:)?\/\//i.test(src) || src.startsWith('data:') || src.startsWith('#')) { setResolvedSrc(src); return () => { cancelled = true; }; }
-    const assetPath = resolveAssetPath(documentPath, src);
-    Promise.resolve(provider.getAssetUrl({ owner, repository, path: assetPath, ref: assetRef })).then((url) => { if (!cancelled) setResolvedSrc(url || src); });
-    return () => { cancelled = true; };
-  }, [assetRef, documentPath, owner, provider, repository, src]);
+  const resolvedSrc = useResolvedAssetUrl({ src, provider, owner, repository, documentPath, assetRef });
   return <img {...props} src={resolvedSrc} alt={alt || ''} />;
 }
 
@@ -291,17 +288,12 @@ export default function DocsPage() {
   useEffect(() => {
     if (!selectedDocument || !provider) return;
     if (viewMode !== 'document') { setContentLoading(false); setContentError(null); setSource(null); return; }
-    const query = { owner, repository, path: selectedDocument.path, ref: activeRef };
-    const cacheKey = provider.kind === 'local' ? null : documentCacheKey(provider.kind, { ...query, owner: owner });
     let cancelled = false;
     setContentLoading(true); setSource(null); setContentError(null);
-    const readContent = cacheKey ? readMarkdownCache(cacheKey).then((cached) => {
-      if (cached !== null) return cached;
-      return provider.getFile(query).then(async (content) => { await writeMarkdownCache(cacheKey, content); return content; });
-    }) : provider.getFile(query);
+    const readContent = readCachedDocument(provider, owner, repository, selectedDocument.path, currentVersion || activeRef);
     readContent.then((content) => { if (!cancelled) setSource({ path: selectedDocument.path, content }); }).catch((reason: unknown) => { if (!cancelled) setContentError(reason instanceof Error ? reason.message : '无法读取 Markdown 文件。'); }).finally(() => { if (!cancelled) setContentLoading(false); });
     return () => { cancelled = true; };
-  }, [activeRef, localId, owner, provider, repository, selectedDocument, sourceKind, viewMode]);
+  }, [activeRef, currentVersion, localId, owner, provider, repository, selectedDocument, sourceKind, viewMode]);
 
   useEffect(() => {
     if (!provider || !tree.length) return;
@@ -348,7 +340,7 @@ export default function DocsPage() {
           } else {
             await waitUntilPageIsVisible();
             if (cancelled) return;
-            const content = await readSearchSource(provider, owner, repository, documentNode.path, activeRef);
+            const content = await readCachedDocument(provider, owner, repository, documentNode.path, currentVersion || activeRef);
             if (cancelled) return;
             const size = new TextEncoder().encode(content).byteLength;
             if (size > profile.maxFileSize || bodyBytes + size > profile.bodyBudget || bodyDocuments >= profile.maxBodyDocuments) {

@@ -17,8 +17,12 @@ try {
   assert.deepEqual(tree.map((entry) => entry.path).sort(), ['README.md', 'assets/local-flow.svg', 'guides/getting-started.md']);
   assert.equal(await provider.getFile({ ...query, path: 'guides/getting-started.md' }), '# Local guide');
   const assetUrl = await provider.getAssetUrl({ ...query, path: 'assets/local-flow.svg' });
+  const nextAssetUrl = await provider.getAssetUrl({ ...query, path: 'assets/local-flow.svg' });
   assert.match(assetUrl, /^blob:/);
+  assert.match(nextAssetUrl, /^blob:/);
+  assert.notEqual(assetUrl, nextAssetUrl, '组件释放 Blob URL 后，Provider 不应复用已失效的缓存地址');
   URL.revokeObjectURL(assetUrl);
+  URL.revokeObjectURL(nextAssetUrl);
   assert.deepEqual(await provider.getRefs(query), []);
   assert.deepEqual(await provider.getFileHistory({ ...query, path: 'README.md', limit: 10 }), []);
   process.stdout.write('Local folder provider regression passed.\n');

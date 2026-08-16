@@ -160,7 +160,7 @@ button { font: inherit; }
 .chevron { display: inline-block; color: #a7afba; font-size: 18px; line-height: 10px; transform: rotate(0); transition: transform .2s; }
 .chevron.open { transform: rotate(90deg); }
 .file-icon { width: 10px; color: #b7bec9; font: 16px/1 'DM Mono', monospace; }
-.docs-main { min-width: 0; flex: 1; }
+.docs-main { min-width: 0; flex: 1; overflow-x: hidden; }
 .document-wrap { max-width: 800px; margin: auto; padding: 62px 55px 72px; }
 .document-wrap.diff-document-wrap { max-width: 1280px; padding-inline: 36px; }
 .document-meta { display: flex; gap: 10px; align-items: center; margin-bottom: 25px; color: #a0a8b4; font: 11px 'DM Mono', monospace; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
@@ -182,7 +182,7 @@ button { font: inherit; }
 .markdown-body th, .markdown-body td { padding: 9px 12px; border: 1px solid #e5e8ed; text-align: left; }
 .markdown-body th { color: #18202b; background: #f7f8fa; }
 .markdown-body input[type='checkbox'] { accent-color: #ee5b39; }
-.markdown-body pre { overflow: auto; margin: 23px 0; padding: 18px 20px; border-radius: 9px; background: #1d2632; box-shadow: 0 7px 18px #18202b14; }
+.markdown-body pre { box-sizing: border-box; max-width: 100%; overflow: auto; margin: 23px 0; padding: 18px 20px; border-radius: 9px; background: #1d2632; box-shadow: 0 7px 18px #18202b14; }
 .markdown-body pre code { color: #e7edf6; font: 13px/1.75 'DM Mono', monospace; }
 .code-inline { padding: 2px 5px; border-radius: 4px; color: #d65338; background: #fff0eb; font: 13px 'DM Mono', monospace; }
 .markdown-body pre .code-inline { padding: 0; color: #e7edf6; background: transparent; }
