@@ -1,6 +1,6 @@
 {
   "name": "@md-with-git/viewer",
-  "version": "0.1.5",
+  "version": "0.1.9",
   "type": "module",
   "packageManager": "pnpm@11.16.0",
   "repository": {
@@ -39,9 +39,11 @@
     "typecheck": "tsc -b",
     "test:fixtures": "node tests/verify-fixtures.mjs",
     "test:github-provider": "node tests/github-provider-asset-route.mjs",
+    "test:github-metadata": "node tests/github-provider-metadata-cache.mjs",
+    "test:e2e": "playwright test --reporter=line",
     "test:local-folder": "node tests/local-folder-provider.mjs",
     "test:local-git": "node tests/run-local-git-browser-regression.mjs",
-    "check": "pnpm typecheck && pnpm test:fixtures && pnpm test:github-provider && pnpm test:local-folder",
+    "check": "pnpm typecheck && pnpm test:fixtures && pnpm test:github-provider && pnpm test:github-metadata && pnpm test:local-folder && pnpm test:e2e",
     "build:web": "tsc -b && vite build",
     "build:lib": "vite build --config vite.lib.config.ts && tsc -p tsconfig.lib.json",
     "build": "pnpm build:web && pnpm build:lib",
@@ -49,14 +51,17 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@mermaid-js/layout-elk": "0.2.2",
     "buffer": "6.0.3",
     "isomorphic-git": "^1.25.0",
     "katex": "^0.18.1",
     "mermaid": "^11.16.1",
     "react-markdown": "^9.0.1",
+    "react-resizable": "4.0.2",
     "rehype-katex": "^7.0.1",
     "remark-gfm": "^4.0.0",
     "remark-math": "^6.0.0",
+    "tocbot": "4.36.2",
     "yaml": "^2.7.0"
   },
   "peerDependencies": {
@@ -65,6 +70,7 @@
     "react-router-dom": "^6.28.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",

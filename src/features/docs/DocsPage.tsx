@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
+import tocbot from 'tocbot';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { buildDocumentTree, findDocument, findFirstDocument } from './tree';
-import { parseFrontmatter, resolveAssetPath } from './markdown';
+import { parseFrontmatter } from './markdown';
+import { useResolvedAssetUrl } from './assetUrls';
 import { documentCacheKey, readMarkdownCache, readSearchIndexCache, searchIndexCacheKey, writeMarkdownCache, writeSearchIndexCache } from './cache';
-import { BitbucketProvider, getLocalFolder, GitHubProvider } from './providers';
+import { BitbucketProvider, getLocalFolder, GitHubProvider, LocalFolderPermissionError } from './providers';
 import type { DocumentNode, RepositoryEntry, RepositoryProvider, RepositoryRef, TreeNode } from './types';
 import type { ImgHTMLAttributes } from 'react';
 import { parse as parseYaml } from 'yaml';
@@ -24,6 +26,7 @@ import type { WorkspaceSource } from './workspaceSources';
 import { activateRepositoryAccessToken } from './accessTokens';
 import { LanguageSwitcher, useI18n } from '../../i18n';
 import { BrandMark } from './Branding';
+import { ResizableMarkdownTable, resizableMarkdownTableComponents } from './ResizableMarkdownTable';
 
 const githubProvider = new GitHubProvider();
 const bitbucketProvider = new BitbucketProvider();
@@ -50,17 +53,20 @@ async function waitUntilPageIsVisible(): Promise<void> {
   await new Promise<void>((resolve) => document.addEventListener('visibilitychange', () => resolve(), { once: true }));
 }
 
-async function readSearchSource(provider: RepositoryProvider, owner: string, repository: string, path: string, ref?: string): Promise<string> {
-  if (provider.kind === 'local') return provider.getFile({ owner, repository, path, ref });
-  const url = await provider.getAssetUrl({ owner, repository, path, ref });
-  const response = await fetch(url, { headers: { Accept: 'text/plain' } });
-  if (!response.ok) throw new Error(`全文索引读取失败（${response.status}）。`);
-  return response.text();
+async function readCachedDocument(provider: RepositoryProvider, owner: string, repository: string, path: string, ref?: string): Promise<string> {
+  const query = { owner, repository, path, ref };
+  if (provider.kind === 'local') return provider.getFile(query);
+  const cacheKey = documentCacheKey(provider.kind, query);
+  const cached = await readMarkdownCache(cacheKey);
+  if (cached !== null) return cached;
+  const content = await provider.getFile(query);
+  await writeMarkdownCache(cacheKey, content);
+  return content;
 }
 
-function ErrorState({ message, actionHref = '/', actionLabel = '返回首页' }: { message: string; actionHref?: string; actionLabel?: string }) {
+function ErrorState({ message, actionHref = '/', actionLabel = '返回首页', onRetry, retrying = false }: { message: string; actionHref?: string; actionLabel?: string; onRetry?: () => void; retrying?: boolean }) {
   const { t } = useI18n();
-  return <div className="state-card error-state"><span className="state-icon">!</span><h2>{t('failedToLoad')}</h2><p>{message}</p><Link to={actionHref} className="button button-primary">{actionLabel === '返回首页' ? t('home') : actionLabel}</Link></div>;
+  return <div className="state-card error-state"><span className="state-icon">!</span><h2>{t('failedToLoad')}</h2><p>{message}</p>{onRetry && <button type="button" className="button button-primary" onClick={onRetry} disabled={retrying}>{retrying ? t('authorizing') : t('reauthorize')}</button>}<Link to={actionHref} className="button button-primary">{actionLabel === '返回首页' ? t('home') : actionLabel}</Link></div>;
 }
 
 function SidebarNode({ node, activePath, expandedPaths, onNavigate, onToggle }: { node: TreeNode; activePath: string; expandedPaths: Set<string>; onNavigate: (path: string) => void; onToggle: (path: string) => void }) {
@@ -72,15 +78,16 @@ function SidebarNode({ node, activePath, expandedPaths, onNavigate, onToggle }: 
 }
 
 function WorkspaceSwitcher({ sources, activeId, onSelect }: { sources: WorkspaceSource[]; activeId?: string; onSelect: (id: string) => void }) {
+  const { t } = useI18n();
   const active = sources.find((source) => source.id === activeId);
   const alternatives = sources.filter((source) => source.id !== activeId);
   if (!active || !activeId) return null;
-  return <details className="workspace-switcher"><summary><span className="workspace-source-title">{active.label}</span><span className="workspace-switcher-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="m7 9 5-5 5 5M7 15l5 5 5-5" /></svg></span></summary>{alternatives.length > 0 && <div className="workspace-switcher-menu" role="menu">{alternatives.map((source) => <button type="button" role="menuitem" key={source.id} onClick={(event) => { const details = event.currentTarget.closest('details'); if (details) details.open = false; onSelect(source.id); }}><span>{source.label}</span><small>{source.kind === 'local-folder' ? '本地文件夹' : source.kind === 'local-git' ? '本地 Git' : source.kind === 'bitbucket' ? 'Bitbucket' : 'GitHub'}</small></button>)}</div>}</details>;
+  return <details className="workspace-switcher"><summary><span className="workspace-source-title">{active.label}</span><span className="workspace-switcher-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="m7 9 5-5 5 5M7 15l5 5 5-5" /></svg></span></summary>{alternatives.length > 0 && <div className="workspace-switcher-menu" role="menu">{alternatives.map((source) => <button type="button" role="menuitem" key={source.id} onClick={(event) => { const details = event.currentTarget.closest('details'); if (details) details.open = false; onSelect(source.id); }}><span>{source.label}</span><small>{source.kind === 'local-folder' ? t('localFolderName') : source.kind === 'local-git' ? t('localGitLabel') : source.kind === 'bitbucket' ? 'Bitbucket' : 'GitHub'}</small></button>)}</div>}</details>;
 }
 
-function Sidebar({ tree, activePath, expandedPaths, onNavigate, onToggle, sources, activeSourceId, onSelectSource, onClose, containerRef }: { tree: TreeNode[]; activePath: string; expandedPaths: Set<string>; onNavigate: (path: string) => void; onToggle: (path: string) => void; sources: WorkspaceSource[]; activeSourceId?: string; onSelectSource: (id: string) => void; onClose: () => void; containerRef: RefObject<HTMLElement> }) {
+function Sidebar({ tree, activePath, expandedPaths, onNavigate, onToggle, sources, activeSourceId, onSelectSource, onClose, collapsed, onCollapseToggle, containerRef }: { tree: TreeNode[]; activePath: string; expandedPaths: Set<string>; onNavigate: (path: string) => void; onToggle: (path: string) => void; sources: WorkspaceSource[]; activeSourceId?: string; onSelectSource: (id: string) => void; onClose: () => void; collapsed: boolean; onCollapseToggle: () => void; containerRef: RefObject<HTMLElement> }) {
   const { t } = useI18n();
-  return <aside ref={containerRef} id="document-sidebar" className="docs-sidebar" tabIndex={-1} aria-label={t('documentation')}><button type="button" className="mobile-menu-close" onClick={onClose}>关闭目录</button><WorkspaceSwitcher sources={sources} activeId={activeSourceId} onSelect={onSelectSource} /><div className="sidebar-heading"><span className="sidebar-kicker">{t('documentation')}</span><span className="tree-count">{countDocuments(tree)} {t('pages')}</span></div><nav aria-label={t('documentation')}>{tree.map((node) => <SidebarNode key={node.path} node={node} activePath={activePath} expandedPaths={expandedPaths} onNavigate={onNavigate} onToggle={onToggle} />)}</nav></aside>;
+  return <aside ref={containerRef} id="document-sidebar" className={`docs-sidebar ${collapsed ? 'collapsed' : ''}`} tabIndex={-1} aria-label={t('documentation')}><button type="button" className="sidebar-collapse-toggle" onClick={onCollapseToggle} aria-expanded={!collapsed} aria-label={collapsed ? t('sidebarExpand') : t('sidebarCollapse')} title={collapsed ? t('sidebarExpand') : t('sidebarCollapse')}>{collapsed ? '›' : '‹'}</button><div className="sidebar-content"><button type="button" className="mobile-menu-close" onClick={onClose}>{t('closeDirectory')}</button><WorkspaceSwitcher sources={sources} activeId={activeSourceId} onSelect={onSelectSource} /><div className="sidebar-heading"><span className="sidebar-kicker">{t('documentation')}</span><span className="tree-count">{countDocuments(tree)} {t('pages')}</span></div><nav aria-label={t('documentation')}>{tree.map((node) => <SidebarNode key={node.path} node={node} activePath={activePath} expandedPaths={expandedPaths} onNavigate={onNavigate} onToggle={onToggle} />)}</nav></div></aside>;
 }
 
 function collectSectionPaths(nodes: TreeNode[]): string[] {
@@ -93,20 +100,81 @@ function countDocuments(nodes: TreeNode[]): number {
 
 function LoadingState({ source }: { source: SourceKind }) {
   const { t } = useI18n();
-  const label = source === 'local' ? '本地文件夹' : source === 'bitbucket' ? 'Bitbucket' : 'GitHub';
+  const label = source === 'local' ? t('localFolderName') : source === 'bitbucket' ? 'Bitbucket' : 'GitHub';
   return <div className="state-card loading-state"><div className="spinner" /><h2>{t('loadingDocuments')}</h2><p>{t('loadingFrom', { source: label })}</p></div>;
 }
 
 function MarkdownImage({ src, alt, provider, owner, repository, documentPath, assetRef, ...props }: ImgHTMLAttributes<HTMLImageElement> & { provider: RepositoryProvider; owner: string; repository: string; documentPath: string; assetRef?: string }) {
-  const [resolvedSrc, setResolvedSrc] = useState(src);
-  useEffect(() => {
-    let cancelled = false;
-    if (!src || /^(?:[a-z]+:)?\/\//i.test(src) || src.startsWith('data:') || src.startsWith('#')) { setResolvedSrc(src); return () => { cancelled = true; }; }
-    const assetPath = resolveAssetPath(documentPath, src);
-    Promise.resolve(provider.getAssetUrl({ owner, repository, path: assetPath, ref: assetRef })).then((url) => { if (!cancelled) setResolvedSrc(url || src); });
-    return () => { cancelled = true; };
-  }, [assetRef, documentPath, owner, provider, repository, src]);
+  const resolvedSrc = useResolvedAssetUrl({ src, provider, owner, repository, documentPath, assetRef });
   return <img {...props} src={resolvedSrc} alt={alt || ''} />;
+}
+
+interface TocEntry {
+  id: string;
+  level: number;
+  line: number;
+  title: string;
+}
+
+function plainHeadingText(value: string): string {
+  return value
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/<[^>]*>/g, '')
+    .replace(/[\\`*_~]/g, '')
+    .trim();
+}
+
+function headingSlug(title: string): string {
+  const normalized = title.normalize('NFKD').toLocaleLowerCase()
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\p{L}\p{N}\s-]/gu, '')
+    .trim()
+    .replace(/[\s-]+/g, '-');
+  return normalized || 'section';
+}
+
+function extractToc(markdown: string): TocEntry[] {
+  const entries: TocEntry[] = [];
+  const usedIds = new Map<string, number>();
+  const lines = markdown.replaceAll('\r\n', '\n').split('\n');
+  let fenced = false;
+  const add = (level: number, rawTitle: string, line: number) => {
+    const title = plainHeadingText(rawTitle.replace(/\s+#+\s*$/, ''));
+    if (!title || level < 2) return;
+    const slug = headingSlug(title);
+    const count = usedIds.get(slug) || 0;
+    usedIds.set(slug, count + 1);
+    entries.push({ id: `toc-${slug}${count ? `-${count}` : ''}`, level, line, title });
+  };
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (/^\s*(```|~~~)/.test(line)) { fenced = !fenced; continue; }
+    if (fenced) continue;
+    const atx = line.match(/^ {0,3}(#{1,6})[ \t]+(.+?)\s*$/);
+    if (atx) { add(atx[1].length, atx[2], index + 1); continue; }
+    const underline = lines[index + 1];
+    if (line.trim() && underline && /^ {0,3}(-{2,}|={2,})\s*$/.test(underline)) {
+      add(underline.trim().startsWith('=') ? 1 : 2, line, index + 1);
+      index += 1;
+    }
+  }
+  return entries;
+}
+
+function nodeStartLine(node: unknown): number | undefined {
+  if (!node || typeof node !== 'object') return undefined;
+  const position = (node as { position?: { start?: { line?: unknown } } }).position;
+  return typeof position?.start?.line === 'number' ? position.start.line : undefined;
+}
+
+function tocIdForNode(entriesByLine: Map<number, TocEntry>, node: unknown): string | undefined {
+  const line = nodeStartLine(node);
+  return line === undefined ? undefined : entriesByLine.get(line)?.id;
+}
+
+function DocumentToc({ collapsed, navRef, onToggle, label, collapseLabel, expandLabel }: { collapsed: boolean; navRef: RefObject<HTMLElement>; onToggle: () => void; label: string; collapseLabel: string; expandLabel: string }) {
+  return <aside className={`document-table-of-contents ${collapsed ? 'collapsed' : ''}`} aria-label={label}><div className="toc-heading"><span>{label}</span><button type="button" onClick={onToggle} aria-expanded={!collapsed} aria-label={collapsed ? expandLabel : collapseLabel}>{collapsed ? '‹' : '›'}</button></div>{!collapsed && <nav ref={navRef} />}</aside>;
 }
 
 function sourceFromQuery(value: string | null): SourceKind {
@@ -146,6 +214,7 @@ function YamlRendererBlock({ name, source, registry, context }: { name: string; 
 }
 
 export default function DocsPage() {
+  const { t } = useI18n();
   const { '*': wildcard = '' } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -158,7 +227,12 @@ export default function DocsPage() {
   const [contentLoading, setContentLoading] = useState(false);
   const [contentError, setContentError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [localPermissionRequired, setLocalPermissionRequired] = useState(false);
+  const [localPermissionRequesting, setLocalPermissionRequesting] = useState(false);
+  const [localPermissionNonce, setLocalPermissionNonce] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [tocCollapsed, setTocCollapsed] = useState(false);
   const [history, setHistory] = useState<Commit[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
@@ -180,6 +254,8 @@ export default function DocsPage() {
   const searchRequestId = useRef(0);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const sidebarRef = useRef<HTMLElement>(null);
+  const tocNavRef = useRef<HTMLElement>(null);
+  const articleRef = useRef<HTMLElement>(null);
   const rendererRegistry = useDocsRendererRegistry();
 
   const segments = wildcard.split('/').filter(Boolean);
@@ -198,6 +274,7 @@ export default function DocsPage() {
     if (sourceKind === 'local') return localProvider;
     return sourceKind === 'bitbucket' ? bitbucketProvider : githubProvider;
   }, [localProvider, sourceKind]);
+  const tocEntries = useMemo(() => source ? extractToc(parseFrontmatter(source.content).content) : [], [source]);
   useEffect(() => {
     if (sourceKind === 'github' || sourceKind === 'bitbucket') activateRepositoryAccessToken(sourceKind, owner, repository);
   }, [owner, repository, sourceKind]);
@@ -205,6 +282,19 @@ export default function DocsPage() {
   const activeRef = ref || defaultRef;
   const currentVersion = refs.find((item) => item.name === activeRef)?.sha || activeRef;
   const activePath = source?.path || documentPath;
+  const requestLocalReadPermission = useCallback(async () => {
+    if (!localProvider) return;
+    setLocalPermissionRequesting(true);
+    try {
+      await localProvider.requestReadPermission();
+      setLocalPermissionRequired(false); setError(null); setContentError(null); setLocalPermissionNonce((value) => value + 1);
+    } catch (reason) {
+      const message = reason instanceof Error ? reason.message : '无法重新获得本地文件夹访问权限，请重新选择文件夹。';
+      setLocalPermissionRequired(true); setError(message); setContentError(message);
+    } finally {
+      setLocalPermissionRequesting(false);
+    }
+  }, [localProvider]);
 
   useEffect(() => {
     if (activeSourceId || !owner || !repository || (sourceKind === 'local' && !localId)) return;
@@ -227,7 +317,7 @@ export default function DocsPage() {
     if (sourceKind !== 'local' && !scope) { setLoading(false); setError('请指定要渲染的文档目录，例如 ?scope=docs 或 ?scope=docs/guide。'); return; }
     if (sourceKind === 'local' && localMode === 'git' && !scope) { setLoading(false); setError('本地 Git 仓库必须指定文档目录 scope，例如 ?scope=docs。'); return; }
     let cancelled = false;
-    setLoading(true); setError(null); setSource(null);
+    setLoading(true); setError(null); setLocalPermissionRequired(false); setSource(null);
     const loadTree = async () => {
       if (localMode === 'git' && localProvider && !(await localProvider.isGitRepository())) throw new Error('未检测到所选项目根目录中的 .git/HEAD，请重新选择 Git 项目文件夹。');
       return provider.getRefs({ owner, repository, ref, rootPath: scope }).then(async (nextRefs) => {
@@ -238,9 +328,9 @@ export default function DocsPage() {
       setRefs(nextRefs); setDefaultRef(nextDefault); setTree(buildDocumentTree(nextEntries, scope || ''));
       });
     };
-    loadTree().catch((reason: unknown) => { if (!cancelled) setError(reason instanceof Error ? reason.message : '无法读取文档空间。'); }).finally(() => { if (!cancelled) setLoading(false); });
+    loadTree().catch((reason: unknown) => { if (!cancelled) { setLocalPermissionRequired(reason instanceof LocalFolderPermissionError); setError(reason instanceof Error ? reason.message : '无法读取文档空间。'); } }).finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [localMode, localProvider, owner, provider, ref, repository, scope, sourceKind]);
+  }, [localMode, localPermissionNonce, localProvider, owner, provider, ref, repository, scope, sourceKind]);
 
   const selectedDocument = useMemo(() => documentPath ? findDocument(tree, documentPath) : findFirstDocument(tree), [documentPath, tree]);
 
@@ -291,17 +381,14 @@ export default function DocsPage() {
   useEffect(() => {
     if (!selectedDocument || !provider) return;
     if (viewMode !== 'document') { setContentLoading(false); setContentError(null); setSource(null); return; }
-    const query = { owner, repository, path: selectedDocument.path, ref: activeRef };
-    const cacheKey = provider.kind === 'local' ? null : documentCacheKey(provider.kind, { ...query, owner: owner });
     let cancelled = false;
     setContentLoading(true); setSource(null); setContentError(null);
-    const readContent = cacheKey ? readMarkdownCache(cacheKey).then((cached) => {
-      if (cached !== null) return cached;
-      return provider.getFile(query).then(async (content) => { await writeMarkdownCache(cacheKey, content); return content; });
-    }) : provider.getFile(query);
-    readContent.then((content) => { if (!cancelled) setSource({ path: selectedDocument.path, content }); }).catch((reason: unknown) => { if (!cancelled) setContentError(reason instanceof Error ? reason.message : '无法读取 Markdown 文件。'); }).finally(() => { if (!cancelled) setContentLoading(false); });
+    const readContent = readCachedDocument(provider, owner, repository, selectedDocument.path, currentVersion || activeRef);
+    readContent.then((content) => { if (!cancelled) setSource({ path: selectedDocument.path, content }); }).catch((reason: unknown) => { if (!cancelled) { setLocalPermissionRequired(reason instanceof LocalFolderPermissionError); setContentError(reason instanceof Error ? reason.message : '无法读取 Markdown 文件。'); } }).finally(() => { if (!cancelled) setContentLoading(false); });
     return () => { cancelled = true; };
-  }, [activeRef, localId, owner, provider, repository, selectedDocument, sourceKind, viewMode]);
+  }, [activeRef, currentVersion, localId, localPermissionNonce, owner, provider, repository, selectedDocument, sourceKind, viewMode]);
+
+  useEffect(() => { setTocCollapsed(false); }, [source?.path]);
 
   useEffect(() => {
     if (!provider || !tree.length) return;
@@ -348,7 +435,7 @@ export default function DocsPage() {
           } else {
             await waitUntilPageIsVisible();
             if (cancelled) return;
-            const content = await readSearchSource(provider, owner, repository, documentNode.path, activeRef);
+            const content = await readCachedDocument(provider, owner, repository, documentNode.path, currentVersion || activeRef);
             if (cancelled) return;
             const size = new TextEncoder().encode(content).byteLength;
             if (size > profile.maxFileSize || bodyBytes + size > profile.bodyBudget || bodyDocuments >= profile.maxBodyDocuments) {
@@ -415,12 +502,35 @@ export default function DocsPage() {
     return () => { cancelled = true; };
   }, [activeRef, fromRef, owner, provider, repository, selectedDocument, toRef, viewMode]);
 
+  useEffect(() => {
+    if (viewMode !== 'document' || tocCollapsed || !tocEntries.length || !tocNavRef.current || !articleRef.current) return;
+    tocbot.init({
+      tocElement: tocNavRef.current,
+      contentElement: articleRef.current,
+      headingSelector: 'h2, h3, h4, h5, h6',
+      orderedList: false,
+      scrollSmooth: false,
+      headingsOffset: 88,
+      scrollHandlerType: 'throttle',
+      scrollHandlerTimeout: 50,
+      // Tocbot still generates and maintains the navigation tree, but its
+      // viewport-based active-heading detection is not reliable in this page's
+      // document layout. Keep those implementation classes unstyled instead.
+      activeLinkClass: 'toc-active-link-disabled',
+      activeListItemClass: 'toc-active-list-item-disabled',
+      disableTocScrollSync: true,
+    });
+    return () => tocbot.destroy();
+  }, [tocCollapsed, tocEntries, viewMode]);
+
   if (loading) return <div className="docs-shell"><Topbar owner={owner} repository={repository} scope={scope} source={sourceKind} localMode={localMode} onMenu={() => setSidebarOpen(true)} /><LoadingState source={sourceKind} /></div>;
-  if (error && !tree.length) return <div className="docs-shell"><Topbar owner={owner} repository={repository} scope={scope} source={sourceKind} localMode={localMode} onMenu={() => setSidebarOpen(true)} /><ErrorState message={error} actionHref={sourceKind === 'local' ? `/?mode=${localMode === 'git' ? 'local-git' : 'local-folder'}` : '/'} actionLabel={sourceKind === 'local' ? localMode === 'git' ? '重新设置本地 Git' : '重新设置本地文档' : '返回首页'} /></div>;
+  if (error && !tree.length) return <div className="docs-shell"><Topbar owner={owner} repository={repository} scope={scope} source={sourceKind} localMode={localMode} onMenu={() => setSidebarOpen(true)} /><ErrorState message={error} actionHref={sourceKind === 'local' ? `/?mode=${localMode === 'git' ? 'local-git' : 'local-folder'}` : '/'} actionLabel={sourceKind === 'local' ? localMode === 'git' ? '重新设置本地 Git' : '重新设置本地文档' : '返回首页'} onRetry={localPermissionRequired ? requestLocalReadPermission : undefined} retrying={localPermissionRequesting} /></div>;
   if (!tree.length) return <div className="docs-shell"><Topbar owner={owner} repository={repository} scope={scope} source={sourceKind} localMode={localMode} onMenu={() => setSidebarOpen(true)} /><ErrorState message={scope ? `目录 “${scope}” 中没有发现 Markdown 文件。` : '文档空间中没有发现 Markdown 文件。'} /></div>;
   if (!selectedDocument) return <div className="docs-shell"><Topbar owner={owner} repository={repository} scope={scope} source={sourceKind} localMode={localMode} onMenu={() => setSidebarOpen(true)} /><ErrorState message="找不到请求的 Markdown 文档，请从左侧目录选择一个页面。" /></div>;
 
   const parsed = source ? parseFrontmatter(source.content) : null;
+  const tocByLine = new Map(tocEntries.map((entry) => [entry.line, entry]));
+  const hasToc = viewMode === 'document' && !contentLoading && !contentError && tocEntries.length > 0;
   const viewQuery = new URLSearchParams(searchParams);
   viewQuery.delete('from');
   viewQuery.delete('to');
@@ -434,9 +544,10 @@ export default function DocsPage() {
   const isHistoricalVersion = viewMode === 'document' && searchParams.get('historyVersion') === '1';
   const hideDocumentDirectory = isHistoricalVersion || viewMode === 'history' || viewMode === 'diff';
   const diffViewError = viewMode === 'diff' && (!fromRef || !toRef) ? '请在 diff URL 中提供 from 和 to 两个版本，例如 ?from=abc123&to=def456。' : diffError;
-  const viewContent = viewMode === 'history' ? <HistoryView commits={history} loading={historyLoading} error={historyError} documentPath={selectedDocument.path} documentHref={documentHref} diffPath={diffPath} currentRef={currentVersion} sourceKind={sourceKind} /> : viewMode === 'diff' ? <DiffView diff={diff} before={comparisonBefore} after={comparisonAfter} provider={provider} owner={owner} repository={repository} documentPath={selectedDocument.path} loading={diffLoading} error={diffViewError} historyPath={historyPath} /> : contentLoading ? <div className="document-skeleton"><div /><div /><div /><div /></div> : contentError ? <div className="inline-error">{contentError}</div> : !parsed ? <div className="document-skeleton"><div /><div /><div /><div /></div> : <><div className="document-meta"><span>{selectedDocument.path}</span>{activeRef && <span className="ref-badge">{activeRef.slice(0, 12)}</span>}<span className="document-actions"><Link to={historyPath}>{isHistoricalVersion ? '返回历史一览' : 'History'}</Link></span></div><article className="markdown-body"><h1>{parsed.title}</h1><ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[[rehypeKatex, { throwOnError: false, strict: 'warn', trust: false }]]} components={{ h1: () => null, a: ({ href, children, ...props }) => <a href={href} {...props} target={href?.startsWith('http') ? '_blank' : undefined} rel={href?.startsWith('http') ? 'noreferrer' : undefined}>{children}</a>, img: ({ src, alt, ...props }) => provider ? <MarkdownImage src={src} alt={alt} provider={provider} owner={owner} repository={repository} documentPath={selectedDocument.path} assetRef={activeRef} {...props} /> : null, code: ({ className, children, node, ...props }) => { const language = className?.replace('language-', ''); const meta = readCodeMeta(node); const rendererName = language === 'yaml' ? rendererNameFromMeta(meta) : undefined; const CodeRenderer = language ? rendererRegistry.getCodeBlockRenderer(language) : undefined; const codeSource = String(children).replace(/\n$/, ''); const context = { documentPath: selectedDocument.path, repository, ref: activeRef, scope }; if (rendererName) return <YamlRendererBlock name={rendererName} source={codeSource.trim()} registry={rendererRegistry} context={context} />; if (CodeRenderer && language) return <CodeRenderer source={codeSource} language={language} meta={meta} context={context} />; return <code className={`${className || ''} code-inline`} data-language={language} {...props}>{children}</code>; } }}>{parsed.content}</ReactMarkdown></article></>;
+  const viewContent = viewMode === 'history' ? <HistoryView commits={history} loading={historyLoading} error={historyError} documentPath={selectedDocument.path} documentHref={documentHref} diffPath={diffPath} currentRef={currentVersion} sourceKind={sourceKind} /> : viewMode === 'diff' ? <DiffView diff={diff} before={comparisonBefore} after={comparisonAfter} provider={provider} owner={owner} repository={repository} documentPath={selectedDocument.path} loading={diffLoading} error={diffViewError} historyPath={historyPath} /> : contentLoading ? <div className="document-skeleton"><div /><div /><div /><div /></div> : contentError ? <div className="inline-error">{contentError}{localPermissionRequired && <button type="button" className="button button-primary" onClick={requestLocalReadPermission} disabled={localPermissionRequesting}>{localPermissionRequesting ? t('authorizing') : t('reauthorize')}</button>}</div> : !parsed ? <div className="document-skeleton"><div /><div /><div /><div /></div> : <><div className="document-meta"><span>{selectedDocument.path}</span>{activeRef && <span className="ref-badge">{activeRef.slice(0, 12)}</span>}<span className="document-actions"><Link to={historyPath}>{isHistoricalVersion ? t('returnToHistory') : t('history')}</Link></span></div><article ref={articleRef} className="markdown-body"><h1>{parsed.title}</h1><ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[[rehypeKatex, { throwOnError: false, strict: 'warn', trust: false }]]} components={{ h1: () => null, h2: ({ node, ...props }) => <h2 id={tocIdForNode(tocByLine, node)} {...props} />, h3: ({ node, ...props }) => <h3 id={tocIdForNode(tocByLine, node)} {...props} />, h4: ({ node, ...props }) => <h4 id={tocIdForNode(tocByLine, node)} {...props} />, h5: ({ node, ...props }) => <h5 id={tocIdForNode(tocByLine, node)} {...props} />, h6: ({ node, ...props }) => <h6 id={tocIdForNode(tocByLine, node)} {...props} />, table: ({ node, children, ...props }) => <ResizableMarkdownTable key={`${selectedDocument.path}:${node?.position?.start.offset || 0}`} tableKey={`${selectedDocument.path}:${node?.position?.start.offset || 0}`} {...props}>{children}</ResizableMarkdownTable>, ...resizableMarkdownTableComponents, a: ({ href, children, ...props }) => <a href={href} {...props} target={href?.startsWith('http') ? '_blank' : undefined} rel={href?.startsWith('http') ? 'noreferrer' : undefined}>{children}</a>, img: ({ src, alt, ...props }) => provider ? <MarkdownImage src={src} alt={alt} provider={provider} owner={owner} repository={repository} documentPath={selectedDocument.path} assetRef={activeRef} {...props} /> : null, code: ({ className, children, node, ...props }) => { const language = className?.replace('language-', ''); const meta = readCodeMeta(node); const rendererName = language === 'yaml' ? rendererNameFromMeta(meta) : undefined; const CodeRenderer = language ? rendererRegistry.getCodeBlockRenderer(language) : undefined; const codeSource = String(children).replace(/\n$/, ''); const context = { documentPath: selectedDocument.path, repository, ref: activeRef, scope }; if (rendererName) return <YamlRendererBlock name={rendererName} source={codeSource.trim()} registry={rendererRegistry} context={context} />; if (CodeRenderer && language) return <CodeRenderer source={codeSource} language={language} meta={meta} context={context} />; return <code className={`${className || ''} code-inline`} data-language={language} {...props}>{children}</code>; } }}>{parsed.content}</ReactMarkdown></article></>;
   const search = { query: searchQuery, results: searchResults, indexing, indexedCount, indexTotal, error: searchError, notice: searchNotice, onQueryChange: setSearchQuery, onResultSelect: openDocument };
-  return <div className="docs-shell"><Topbar owner={owner} repository={repository} scope={scope} source={sourceKind} localMode={localMode} showMenu={!hideDocumentDirectory} onMenu={() => setSidebarOpen(true)} menuExpanded={sidebarOpen} menuButtonRef={menuButtonRef} search={search} /><div className={`docs-layout ${!hideDocumentDirectory && sidebarOpen ? 'sidebar-visible' : ''}`}>{!hideDocumentDirectory && <><button type="button" className="sidebar-backdrop" onClick={closeSidebar} aria-label="关闭目录" /><Sidebar tree={tree} activePath={activePath} expandedPaths={expandedPaths} onNavigate={openDocument} onToggle={toggleSection} sources={workspaceSources} activeSourceId={activeSourceId} onSelectSource={selectWorkspaceSource} onClose={closeSidebar} containerRef={sidebarRef} /></>}<main className="docs-main"><div className={`document-wrap ${viewMode === 'diff' ? 'diff-document-wrap' : ''}`}>{viewContent}{viewMode === 'document' && !contentLoading && !contentError && parsed && <div className="document-footer"><span>Powered by Git MD Viewer</span><span className="footer-note">{refs.length > 0 ? 'Local Git · read-only' : sourceKind === 'local' ? 'Local folder · read-only' : `${sourceKind} · ${scope}`}</span></div>}</div></main></div></div>;
+  const documentFooter = viewMode === 'document' && !contentLoading && !contentError && parsed && <div className="document-footer"><span>Powered by Git MD Viewer</span><span className="footer-note">{refs.length > 0 ? 'Local Git · read-only' : sourceKind === 'local' ? 'Local folder · read-only' : `${sourceKind} · ${scope}`}</span></div>;
+  return <div className="docs-shell"><Topbar owner={owner} repository={repository} scope={scope} source={sourceKind} localMode={localMode} showMenu={!hideDocumentDirectory} onMenu={() => setSidebarOpen(true)} menuExpanded={sidebarOpen} menuButtonRef={menuButtonRef} search={search} /><div className={`docs-layout ${!hideDocumentDirectory && sidebarOpen ? 'sidebar-visible' : ''}`}>{!hideDocumentDirectory && <><button type="button" className="sidebar-backdrop" onClick={closeSidebar} aria-label={t('closeDirectory')} /><Sidebar tree={tree} activePath={activePath} expandedPaths={expandedPaths} onNavigate={openDocument} onToggle={toggleSection} sources={workspaceSources} activeSourceId={activeSourceId} onSelectSource={selectWorkspaceSource} onClose={closeSidebar} collapsed={sidebarCollapsed} onCollapseToggle={() => setSidebarCollapsed((value) => !value)} containerRef={sidebarRef} /></>}<main className="docs-main"><div className={`document-wrap ${viewMode === 'diff' ? 'diff-document-wrap' : ''} ${hasToc ? 'has-table-of-contents' : ''} ${hasToc && tocCollapsed ? 'toc-collapsed' : ''} ${!hideDocumentDirectory && sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>{hasToc ? <div className="document-content-layout"><div className="document-content">{viewContent}{documentFooter}</div><DocumentToc collapsed={tocCollapsed} navRef={tocNavRef} onToggle={() => setTocCollapsed((value) => !value)} label={t('tocTitle')} collapseLabel={t('tocCollapse')} expandLabel={t('tocExpand')} /></div> : <>{viewContent}{documentFooter}</>}</div></main></div></div>;
 }
 
 function Topbar({ owner, repository, scope, source, localMode, showMenu = true, onMenu, menuExpanded = false, menuButtonRef, search }: { owner: string; repository: string; scope?: string; source: SourceKind; localMode: 'folder' | 'git'; showMenu?: boolean; onMenu: () => void; menuExpanded?: boolean; menuButtonRef?: RefObject<HTMLButtonElement>; search?: { query: string; results: DocumentSearchResult[]; indexing: boolean; indexedCount: number; indexTotal: number; error: string | null; notice: string | null; onQueryChange: (value: string) => void; onResultSelect: (path: string) => void } }) {

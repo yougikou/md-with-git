@@ -2,6 +2,7 @@ import type {
   AssetQuery, Commit, CompareQuery, DiffResult, FileQuery, HistoryQuery, RepositoryEntry, RepositoryProvider, RepositoryRef, TreeQuery,
 } from '../types';
 import { getAccessToken } from '../accessTokens';
+import { createAssetUrl } from '../assetUrls';
 
 interface GitHubContent {
   type: string;
@@ -24,9 +25,22 @@ interface GitHubRef {
   commit?: { sha?: string };
 }
 
+interface MemoryCacheEntry<T> {
+  value: T;
+  expiresAt: number;
+  token?: string;
+}
+
+const metadataCacheTtlMs = 60_000;
+const maxRefCacheEntries = 24;
+const maxTreeCacheEntries = 16;
+
 export class GitHubProvider implements RepositoryProvider {
   readonly kind = 'github' as const;
   private readonly apiBase = 'https://api.github.com';
+  private readonly rawBase = 'https://raw.githubusercontent.com';
+  private readonly refsCache = new Map<string, MemoryCacheEntry<RepositoryRef[]>>();
+  private readonly treeCache = new Map<string, MemoryCacheEntry<RepositoryEntry[]>>();
 
   private headers(accept: string): HeadersInit {
     const token = getAccessToken('github');
@@ -44,33 +58,112 @@ export class GitHubProvider implements RepositoryProvider {
     return response.json() as Promise<T>;
   }
 
+  private async requestPage<T>(url: string): Promise<{ value: T; next?: string }> {
+    const response = await fetch(url, { headers: this.headers('application/vnd.github+json') });
+    if (!response.ok) {
+      if (response.status === 401) throw new Error('GitHub 访问令牌无效或已过期。请在设置页重新填写令牌。');
+      if (response.status === 403) throw new Error('GitHub 拒绝了请求：令牌权限不足，或 API 请求频率已达到限制。');
+      if (response.status === 404) throw new Error('仓库、版本或文件不存在；私有仓库请确认令牌已获授权。');
+      throw new Error(`GitHub API 请求失败（${response.status}）。`);
+    }
+    return { value: await response.json() as T, next: this.nextPage(response.headers.get('link')) };
+  }
+
+  private nextPage(linkHeader: string | null): string | undefined {
+    if (!linkHeader) return undefined;
+    const next = linkHeader.split(',').find((part) => /rel="next"/.test(part));
+    const url = next?.match(/<([^>]+)>/)?.[1];
+    return url?.startsWith(`${this.apiBase}/`) ? url : undefined;
+  }
+
+  private async paged<T>(url: string): Promise<T[]> {
+    const values: T[] = [];
+    let next: string | undefined = url;
+    while (next) {
+      const page: { value: T[]; next?: string } = await this.requestPage<T[]>(next);
+      values.push(...page.value);
+      next = page.next;
+    }
+    return values;
+  }
+
+  private readMetadataCache<T>(cache: Map<string, MemoryCacheEntry<T>>, key: string): T | undefined {
+    const entry = cache.get(key);
+    const token = getAccessToken('github');
+    if (!entry || entry.expiresAt <= Date.now() || entry.token !== token) {
+      cache.delete(key);
+      return undefined;
+    }
+    cache.delete(key);
+    cache.set(key, entry);
+    return entry.value;
+  }
+
+  private writeMetadataCache<T>(cache: Map<string, MemoryCacheEntry<T>>, key: string, value: T, limit: number): T {
+    cache.set(key, { value, expiresAt: Date.now() + metadataCacheTtlMs, token: getAccessToken('github') });
+    while (cache.size > limit) cache.delete(cache.keys().next().value as string);
+    return value;
+  }
+
   private repo(input: TreeQuery) {
     return `${this.apiBase}/repos/${encodeURIComponent(input.owner)}/${encodeURIComponent(input.repository)}`;
   }
 
+  private rawUrl(input: FileQuery): string | undefined {
+    // A raw URL must include a resolved ref. DocsPage supplies the selected/default
+    // ref after loading refs, while callers without one retain the API fallback.
+    if (!input.ref) return undefined;
+    const path = input.path.split('/').map(encodeURIComponent).join('/');
+    return `${this.rawBase}/${encodeURIComponent(input.owner)}/${encodeURIComponent(input.repository)}/${encodeURIComponent(input.ref)}/${path}`;
+  }
+
+  private async rawRequest(input: FileQuery, accept: string): Promise<Response | undefined> {
+    const url = this.rawUrl(input);
+    if (!url) return undefined;
+    try {
+      // Do not attach a token to the CDN request. Public content avoids REST API
+      // rate limits; private content falls back to the authenticated Contents API.
+      const response = await fetch(url, { headers: { Accept: accept } });
+      return response.ok ? response : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
   async getTree(input: TreeQuery): Promise<RepositoryEntry[]> {
     const defaultBranch = input.ref ? input.ref : (await this.request<{ default_branch: string }>(this.repo(input))).default_branch;
+    const rootPath = input.rootPath?.replace(/^\/+|\/+$/g, '');
+    const cacheKey = `${input.owner}:${input.repository}:${defaultBranch}:${rootPath || ''}`;
+    const cached = this.readMetadataCache(this.treeCache, cacheKey);
+    if (cached) return cached;
     const data = await this.request<{ tree: Array<{ path: string; type: string; sha?: string; size?: number }>; truncated?: boolean }>(`${this.repo(input)}/git/trees/${encodeURIComponent(defaultBranch)}?recursive=1`);
     if (data.truncated) console.warn('GitHub tree is truncated; very large repositories may not show every file.');
-    const rootPath = input.rootPath?.replace(/^\/+|\/+$/g, '');
-    return data.tree
+    const tree = data.tree
       .filter((entry) => !rootPath || entry.path === rootPath || entry.path.startsWith(`${rootPath}/`))
-      .map((entry) => ({ path: entry.path, type: entry.type === 'tree' ? 'directory' : 'file', sha: entry.sha, size: entry.size }));
+      .map((entry) => ({ path: entry.path, type: entry.type === 'tree' ? 'directory' as const : 'file' as const, sha: entry.sha, size: entry.size }));
+    return this.writeMetadataCache(this.treeCache, cacheKey, tree, maxTreeCacheEntries);
   }
 
   async getRefs(input: TreeQuery): Promise<RepositoryRef[]> {
+    const cacheKey = `${input.owner}:${input.repository}`;
+    const cached = this.readMetadataCache(this.refsCache, cacheKey);
+    if (cached) return cached;
     const [repository, branches, tags] = await Promise.all([
       this.request<{ default_branch?: string }>(this.repo(input)),
-      this.request<GitHubRef[]>(`${this.repo(input)}/branches?per_page=100`),
-      this.request<GitHubRef[]>(`${this.repo(input)}/tags?per_page=100`),
+      this.paged<GitHubRef>(`${this.repo(input)}/branches?per_page=100`),
+      this.paged<GitHubRef>(`${this.repo(input)}/tags?per_page=100`),
     ]);
-    return [
+    const refs = [
       ...branches.map((ref) => ({ name: ref.name, type: 'branch' as const, sha: ref.commit?.sha, isDefault: ref.name === repository.default_branch })),
       ...tags.map((ref) => ({ name: ref.name, type: 'tag' as const, sha: ref.commit?.sha })),
     ];
+    return this.writeMetadataCache(this.refsCache, cacheKey, refs, maxRefCacheEntries);
   }
 
   async getFile(input: FileQuery): Promise<string> {
+    const raw = await this.rawRequest(input, 'text/plain');
+    if (raw) return raw.text();
+
     const query = input.ref ? `?ref=${encodeURIComponent(input.ref)}` : '';
     const data = await this.request<GitHubContent>(`${this.repo(input)}/contents/${input.path.split('/').map(encodeURIComponent).join('/')}${query}`);
     if (data.type !== 'file' || !data.content) throw new Error('请求的路径不是可读取的文件。');
@@ -79,14 +172,17 @@ export class GitHubProvider implements RepositoryProvider {
   }
 
   async getAssetUrl(input: AssetQuery): Promise<string> {
+    const raw = await this.rawRequest(input, 'application/octet-stream');
+    if (raw) return createAssetUrl(await raw.blob());
+
     const query = input.ref ? `?ref=${encodeURIComponent(input.ref)}` : '';
-    // Keep the Contents API response JSON-only. Fetching this same endpoint with a raw
-    // media type can poison a browser cache entry subsequently used by getFile().
+    // Keep the Contents API response JSON-only. This authenticated fallback serves
+    // private repositories without mixing a raw media type into the API cache entry.
     const data = await this.request<GitHubContent>(`${this.repo(input)}/contents/${input.path.split('/').map(encodeURIComponent).join('/')}${query}`);
     if (data.type !== 'file' || !data.download_url) throw new Error('请求的路径不是可读取的资源文件。');
     const response = await fetch(data.download_url, { headers: this.headers('application/octet-stream') });
     if (!response.ok) throw new Error(`GitHub 资源读取失败（${response.status}）。`);
-    return URL.createObjectURL(await response.blob());
+    return createAssetUrl(await response.blob());
   }
 
   async getFileHistory(input: HistoryQuery): Promise<Commit[]> {

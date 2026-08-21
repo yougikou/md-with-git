@@ -142,6 +142,8 @@ node tests/create-local-git-fixture.mjs
 node tests/run-local-git-browser-regression.mjs
 ```
 
+CI 使用 `pnpm test:e2e` 运行 Playwright 回归：它会在浏览器中模拟原生目录句柄，覆盖本地 Git 的设置与阅读流程、全文搜索、移动端目录、History/Diff，以及 GitHub raw 文件读取失败后的 Contents API 回退。首次在开发机运行时可执行 `pnpm exec playwright install chromium`；Windows 开发环境会优先复用已安装的 Chrome。
+
 该工具只读测试仓库的 `.git` 和文档目录；不会复制、写入或缓存用户选择的项目。它用于在真实浏览器中验证本地 Git Provider。
 
 ```powershell

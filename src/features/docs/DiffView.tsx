@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { ImgHTMLAttributes } from 'react';
-import { resolveAssetPath } from './markdown';
+import { useResolvedAssetUrl } from './assetUrls';
 import type { DiffResult, RepositoryProvider } from './types';
 import { useI18n } from '../../i18n';
+import { ResizableMarkdownTable, resizableMarkdownTableComponents } from './ResizableMarkdownTable';
 
 type ChangeKind = 'unchanged' | 'added' | 'removed' | 'modified';
 
@@ -120,19 +121,12 @@ export function compareMarkdownDocuments(before: string, after: string): Compari
 }
 
 function ComparisonMarkdownImage({ src, alt, provider, owner, repository, documentPath, assetRef, ...props }: ImgHTMLAttributes<HTMLImageElement> & { provider: RepositoryProvider; owner: string; repository: string; documentPath: string; assetRef: string }) {
-  const [resolvedSrc, setResolvedSrc] = useState(src);
-  useEffect(() => {
-    let cancelled = false;
-    if (!src || /^(?:[a-z]+:)?\/\//i.test(src) || src.startsWith('data:') || src.startsWith('#')) { setResolvedSrc(src); return () => { cancelled = true; }; }
-    const assetPath = resolveAssetPath(documentPath, src);
-    Promise.resolve(provider.getAssetUrl({ owner, repository, path: assetPath, ref: assetRef })).then((url) => { if (!cancelled) setResolvedSrc(url || src); });
-    return () => { cancelled = true; };
-  }, [assetRef, documentPath, owner, provider, repository, src]);
+  const resolvedSrc = useResolvedAssetUrl({ src, provider, owner, repository, documentPath, assetRef });
   return <img {...props} src={resolvedSrc} alt={alt || ''} />;
 }
 
 function MarkdownBlock({ content, provider, owner, repository, documentPath, assetRef }: { content: string; provider?: RepositoryProvider; owner: string; repository: string; documentPath: string; assetRef: string }) {
-  return <div className="markdown-body diff-markdown"><ReactMarkdown remarkPlugins={[remarkGfm]} components={{ img: ({ src, alt, ...props }) => provider ? <ComparisonMarkdownImage src={src} alt={alt} provider={provider} owner={owner} repository={repository} documentPath={documentPath} assetRef={assetRef} {...props} /> : <img src={src} alt={alt || ''} {...props} /> }}>{content}</ReactMarkdown></div>;
+  return <div className="markdown-body diff-markdown"><ReactMarkdown remarkPlugins={[remarkGfm]} components={{ table: ({ node, children, ...props }) => <ResizableMarkdownTable key={`${documentPath}:${assetRef}:${node?.position?.start.offset || 0}`} tableKey={`${documentPath}:${assetRef}:${node?.position?.start.offset || 0}`} {...props}>{children}</ResizableMarkdownTable>, ...resizableMarkdownTableComponents, img: ({ src, alt, ...props }) => provider ? <ComparisonMarkdownImage src={src} alt={alt} provider={provider} owner={owner} repository={repository} documentPath={documentPath} assetRef={assetRef} {...props} /> : <img src={src} alt={alt || ''} {...props} /> }}>{content}</ReactMarkdown></div>;
 }
 
 function DocumentComparison({ before, after, provider, owner, repository, documentPath, fromRef, toRef }: { before: string; after: string; provider?: RepositoryProvider; owner: string; repository: string; documentPath: string; fromRef: string; toRef: string }) {

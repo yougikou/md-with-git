@@ -4,13 +4,26 @@ import type {
 import type { LocalFolderSelection } from '../LocalFolderPicker';
 import { loadLocalFolderHandles, saveLocalFolderHandles } from '../localPersistence';
 import { LocalGitRepository } from './LocalGitRepository';
+import { createAssetUrl } from '../assetUrls';
 
 interface LocalFileRecord {
   file?: File;
   handle?: FileSystemFileHandle;
 }
 
+type PermissionAwareFileHandle = FileSystemFileHandle & {
+  queryPermission?: (descriptor?: { mode?: 'read' | 'readwrite' }) => Promise<PermissionState>;
+  requestPermission?: (descriptor?: { mode?: 'read' | 'readwrite' }) => Promise<PermissionState>;
+};
+
 export type LocalFolderMode = 'folder' | 'git';
+
+export class LocalFolderPermissionError extends Error {
+  constructor() {
+    super('本地文件夹访问权限已失效。请点击“重新授权”继续，或重新选择文件夹。');
+    this.name = 'LocalFolderPermissionError';
+  }
+}
 
 function normalizePath(path: string): string {
   return path.replaceAll('\\', '/').replace(/^\/+/, '').replace(/\/+/g, '/');
@@ -20,11 +33,14 @@ function errorMessage(reason: unknown): string {
   return reason instanceof Error ? reason.message : String(reason);
 }
 
+function isPermissionDenied(reason: unknown): boolean {
+  return (typeof DOMException !== 'undefined' && reason instanceof DOMException) ? reason.name === 'NotAllowedError' : Boolean(reason && typeof reason === 'object' && 'name' in reason && (reason as { name?: unknown }).name === 'NotAllowedError');
+}
+
 export class LocalFolderProvider implements RepositoryProvider {
   readonly kind = 'local' as const;
   private readonly mode: LocalFolderMode;
   private readonly files = new Map<string, LocalFileRecord>();
-  private readonly objectUrls = new Map<string, string>();
   private ready: Promise<void> = Promise.resolve();
   private gitRepository?: LocalGitRepository;
   private gitDetection?: Promise<LocalGitRepository | undefined>;
@@ -54,10 +70,47 @@ export class LocalFolderProvider implements RepositoryProvider {
     });
   }
 
+  private async getReadPermission(handle: FileSystemFileHandle, request = false): Promise<PermissionState> {
+    const permissionHandle = handle as PermissionAwareFileHandle;
+    if (!permissionHandle.queryPermission) return 'granted';
+    try {
+      const permission = await permissionHandle.queryPermission({ mode: 'read' });
+      if (permission !== 'prompt' || !request || !permissionHandle.requestPermission) return permission;
+      return permissionHandle.requestPermission({ mode: 'read' });
+    } catch (reason) {
+      if (isPermissionDenied(reason)) return 'denied';
+      // Older WebKit/Electron implementations can expose file handles without the permission methods.
+      return 'granted';
+    }
+  }
+
+  private async readHandleFile(handle: FileSystemFileHandle): Promise<File> {
+    if (await this.getReadPermission(handle) !== 'granted') throw new LocalFolderPermissionError();
+    try {
+      return await handle.getFile();
+    } catch (reason) {
+      if (isPermissionDenied(reason)) throw new LocalFolderPermissionError();
+      throw reason;
+    }
+  }
+
+  async requestReadPermission(): Promise<void> {
+    await this.ready;
+    const handles = [...this.files.values()].flatMap((record) => record.handle ? [record.handle] : []);
+    for (const handle of handles) {
+      if (await this.getReadPermission(handle, true) !== 'granted') throw new LocalFolderPermissionError();
+    }
+  }
+
+  private async ensureReadPermission(): Promise<void> {
+    const handle = [...this.files.values()].find((record) => record.handle)?.handle;
+    if (handle && await this.getReadPermission(handle) !== 'granted') throw new LocalFolderPermissionError();
+  }
+
   private async readBytes(path: string): Promise<Uint8Array | null> {
     const file = this.files.get(normalizePath(path));
     if (!file) return null;
-    const fileObject = file.file || (file.handle ? await file.handle.getFile() : undefined);
+    const fileObject = file.file || (file.handle ? await this.readHandleFile(file.handle) : undefined);
     if (!fileObject) return null;
     return new Uint8Array(await fileObject.arrayBuffer());
   }
@@ -74,7 +127,8 @@ export class LocalFolderProvider implements RepositoryProvider {
             this.gitRepository = candidate;
             return candidate;
           }
-        } catch {
+        } catch (reason) {
+          if (reason instanceof LocalFolderPermissionError) throw reason;
           // Git 专用模式检测失败，交由调用方显示配置错误。
         }
         return undefined;
@@ -93,6 +147,7 @@ export class LocalFolderProvider implements RepositoryProvider {
 
   async getTree(input: TreeQuery): Promise<RepositoryEntry[]> {
     await this.ready;
+    await this.ensureReadPermission();
     const root = normalizePath(input.rootPath || '');
     const gitRepository = await this.getGitRepository();
     if (gitRepository) {
@@ -130,7 +185,7 @@ export class LocalFolderProvider implements RepositoryProvider {
     }
     const file = this.files.get(normalizePath(input.path));
     if (!file) throw new Error(`本地文件不存在：${input.path}`);
-    const fileObject = file.file || (file.handle ? await file.handle.getFile() : undefined);
+    const fileObject = file.file || (file.handle ? await this.readHandleFile(file.handle) : undefined);
     if (!fileObject) throw new Error(`无法读取本地文件：${input.path}`);
     return fileObject.text();
   }
@@ -140,33 +195,24 @@ export class LocalFolderProvider implements RepositoryProvider {
     const path = normalizePath(input.path);
     const file = this.files.get(path);
     const gitRepository = await this.getGitRepository();
-    const cacheKey = `${input.ref || 'HEAD'}:${path}`;
     if (!file && !gitRepository) return '';
-    const existing = this.objectUrls.get(cacheKey);
-    if (existing) return existing;
     if (gitRepository) {
       try {
         const bytes = await gitRepository.readFile(path, input.ref);
         const blobBytes = new Uint8Array(bytes.byteLength);
         blobBytes.set(bytes);
-        const url = URL.createObjectURL(new Blob([blobBytes.buffer]));
-        this.objectUrls.set(cacheKey, url);
-        return url;
+        return createAssetUrl(new Blob([blobBytes.buffer]));
       } catch {
         return '';
       }
     }
     if (!file) return '';
-    const fileObject = file.file || (file.handle ? file.handle.getFile() : undefined);
+    const fileObject = file.file || (file.handle ? this.readHandleFile(file.handle) : undefined);
     if (fileObject instanceof Promise) return fileObject.then((value) => {
-      const url = URL.createObjectURL(value);
-      this.objectUrls.set(cacheKey, url);
-      return url;
+      return createAssetUrl(value);
     });
     if (!fileObject) return '';
-    const url = URL.createObjectURL(fileObject);
-    this.objectUrls.set(cacheKey, url);
-    return url;
+    return createAssetUrl(fileObject);
   }
 
   async getFileHistory(input: HistoryQuery): Promise<Commit[]> {
