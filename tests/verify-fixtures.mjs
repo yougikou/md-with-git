@@ -36,7 +36,7 @@ const contentRequirements = [
   ['tests/fixtures/local-documents/guides/getting-started.md', 'layout: elk'],
   ['tests/fixtures/local-documents/examples/renderers.md', '```mermaid'],
   ['tests/fixtures/local-documents/examples/renderers.md', 'layout: elk'],
-  ['tests/fixtures/local-documents/examples/renderers.md', '$a^2 + b^2 = c^2$'],
+  ['tests/fixtures/local-documents/examples/renderers.md', '$a^2 + b^2 = c^2$'],  ['tests/fixtures/local-documents/examples/renderers.md', '```demo title="本地计数器"'],
 ];
 
 for (const file of requiredFiles) {

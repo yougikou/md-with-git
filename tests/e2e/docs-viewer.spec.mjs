@@ -130,6 +130,44 @@ test('第一阶段的目录、目录折叠、表格与 Mermaid 交互可访问',
   await expect(page.getByRole('dialog', { name: 'Mermaid 图表放大视图' })).not.toBeVisible();
 });
 
+test('第三阶段工作区来源可重命名、排序和移除', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('git-md-viewer-workspace-sources', JSON.stringify([
+      { id: 'source-architecture', label: '架构文档', kind: 'github', owner: 'acme', repository: 'architecture', scope: 'docs' },
+      { id: 'source-product', label: '产品文档', kind: 'bitbucket', owner: 'acme', repository: 'product', scope: 'handbook' },
+    ]));
+  });
+  await page.goto('/');
+
+  const architectureRow = page.locator('.workspace-settings-row').filter({ hasText: '架构文档' });
+  await architectureRow.getByRole('textbox', { name: '架构文档 的显示名称' }).fill('平台架构');
+  await architectureRow.getByRole('button', { name: '保存' }).click();
+  const renamedRow = page.locator('.workspace-settings-row').filter({ hasText: '平台架构' });
+  await expect(renamedRow).toBeVisible();
+  await renamedRow.getByRole('button', { name: '下移' }).click();
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('git-md-viewer-workspace-sources') || '[]').map((source) => source.label))).toEqual(['产品文档', '平台架构']);
+  await page.locator('.workspace-settings-row').filter({ hasText: '平台架构' }).getByRole('button', { name: '移除' }).click();
+  await expect(page.locator('.workspace-settings-row')).toHaveCount(1);
+});
+
+test('第三阶段 YAML 安全降级与 iframe Demo 仅在显式运行后执行', async ({ page }) => {
+  await page.goto('/?mode=local-git');
+  await page.getByRole('button', { name: '选择包含 .git 的项目文件夹' }).click();
+  await page.locator('.scope-tree-option').filter({ hasText: 'docs' }).click();
+  await page.locator('.local-git-form-card button[type="submit"][value="open"]').click();
+  await page.getByRole('button', { name: /Renderers/ }).click();
+  await expect(page.getByText('未注册 YAML 渲染器 “not-installed”')).toBeVisible();
+
+  const demo = page.locator('.iframe-demo');
+  await expect(demo.getByText('尚未运行')).toBeVisible();
+  await expect(demo.locator('iframe')).toHaveCount(0);
+  await demo.getByRole('button', { name: '运行' }).click();
+  const frame = page.frameLocator('iframe[title="本地计数器"]');
+  await frame.getByRole('button', { name: '点击次数：0' }).click();
+  await expect(frame.getByRole('button', { name: '点击次数：1' })).toBeVisible();
+  await demo.getByRole('button', { name: '停止' }).click();
+  await expect(demo.locator('iframe')).toHaveCount(0);
+});
 test('GitHub 文件优先使用 raw 地址，失败时回退 Contents API', async ({ page }) => {
   let rawRequests = 0;
   let apiRequests = 0;
