@@ -86,6 +86,50 @@ test('本地 Git 文档空间支持搜索、移动目录、History 与 Diff', as
   expect(diffUrl.searchParams.get('to')).toBeTruthy();
 });
 
+test('第一阶段的目录、目录折叠、表格与 Mermaid 交互可访问', async ({ page }) => {
+  await page.goto('/?mode=local-git');
+  await page.getByRole('button', { name: '选择包含 .git 的项目文件夹' }).click();
+  await page.locator('.scope-tree-option').filter({ hasText: 'docs' }).click();
+  await page.locator('.local-git-form-card button[type="submit"][value="open"]').click();
+  await expect(page).toHaveURL(/\/docs\/local\/git/);
+  const search = page.getByRole('combobox', { name: '搜索全部文档' });
+  await search.fill('Git history check');
+  await page.getByRole('option').filter({ hasText: 'Getting Started' }).click();
+  await expect(page.getByRole('heading', { name: '本地文档开始使用' })).toBeVisible();
+
+  const toc = page.locator('.document-table-of-contents');
+  await expect(toc).toBeVisible();
+  await expect(toc.getByRole('link', { name: 'ELK 布局测试' })).toBeVisible();
+  const tocToggle = toc.getByRole('button', { name: '收起本页目录' });
+  await tocToggle.click();
+  await expect(toc).toHaveClass(/collapsed/);
+  await expect(toc.getByRole('button', { name: '展开本页目录' })).toHaveAttribute('aria-expanded', 'false');
+  await toc.getByRole('button', { name: '展开本页目录' }).click();
+  await expect(toc).not.toHaveClass(/collapsed/);
+
+  const sidebar = page.locator('#document-sidebar');
+  await page.getByRole('button', { name: '收起文档目录' }).click();
+  await expect(sidebar).toHaveClass(/collapsed/);
+  await expect(page.locator('.document-wrap')).toHaveClass(/sidebar-collapsed/);
+  await page.getByRole('button', { name: '展开文档目录' }).click();
+  await expect(sidebar).not.toHaveClass(/collapsed/);
+
+  const firstResizeHandle = page.getByRole('button', { name: '调整第 1 列宽度' });
+  await expect(firstResizeHandle).toBeVisible();
+  const header = page.locator('.markdown-resizable-table th').first();
+  const originalWidth = await header.evaluate((element) => element.getBoundingClientRect().width);
+  await firstResizeHandle.press('ArrowRight');
+  await expect.poll(() => header.evaluate((element) => element.getBoundingClientRect().width)).toBeGreaterThan(originalWidth);
+  await firstResizeHandle.press('Enter');
+
+  const expandDiagram = page.getByRole('button', { name: '放大 Mermaid 图表' });
+  await expect(expandDiagram).toBeVisible({ timeout: 30_000 });
+  await expandDiagram.click();
+  await expect(page.getByRole('dialog', { name: 'Mermaid 图表放大视图' })).toBeVisible();
+  await page.locator('.mermaid-modal-close').click();
+  await expect(page.getByRole('dialog', { name: 'Mermaid 图表放大视图' })).not.toBeVisible();
+});
+
 test('GitHub 文件优先使用 raw 地址，失败时回退 Contents API', async ({ page }) => {
   let rawRequests = 0;
   let apiRequests = 0;
